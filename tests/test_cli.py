@@ -1,27 +1,25 @@
 """
-Simple example test for the CLI.
-
-Shows how to test Click commands using the CliRunner.
+Tests for the Aura CLI.
 """
 
 from click.testing import CliRunner
 
-from package_name.cli import main
+from aura.cli import main
 
 
-def test_cli_default_greeting():
-    """Test CLI with default name (AI)."""
+def test_cli_help():
+    """Test CLI --help runs successfully."""
     runner = CliRunner()
-    result = runner.invoke(main)
+    result = runner.invoke(main, ["--help"])
 
     assert result.exit_code == 0
-    assert "Hello, AI!" in result.output
+    assert "Aura" in result.output
 
 
-def test_cli_custom_name():
-    """Test CLI with custom name."""
+def test_cli_version():
+    """Test CLI --version outputs version string."""
     runner = CliRunner()
-    result = runner.invoke(main, ["--name", "World"])
+    result = runner.invoke(main, ["--version"])
 
     assert result.exit_code == 0
-    assert "Hello, World!" in result.output
+    assert "0.1.0" in result.output
