@@ -71,18 +71,31 @@ class ProductionMinimizer:
             counter["n"] += len(state.histograms)
             return np.concatenate(blocks)
 
+        sw_all = np.sqrt(w)
+
         def residual(xv: np.ndarray) -> np.ndarray:
             yc = y_calc(set_x(xv))
-            return np.sqrt(w) * (yo - yc)
+            return sw_all * (yo - yc)
 
         def jac(xv: np.ndarray) -> np.ndarray:
-            cur = set_x(xv)
-            blocks = []
-            for hist in state.histograms:
-                expanded = parametric.expand(cur, hist)
-                sw = np.sqrt(hist.weights)[:, None]
-                blocks.append(-sw * forward.jacobian(expanded, hist))
-            return np.concatenate(blocks, axis=0)
+            # Central finite difference at the *residual* level over the free
+            # parameters. Done here (not via forward.jacobian) so that a free
+            # parameter which is a parametric *coefficient* — not a quantity the
+            # forward model reads directly — still gets a correct derivative:
+            # perturbing it re-runs expand, which propagates to every driven
+            # histogram (the parametric chain rule). Phase 6 replaces this with
+            # autodiff through expand.
+            cols = []
+            for j in range(len(xv)):
+                step = 1e-6 * max(abs(xv[j]), 1.0)
+                xp = xv.copy()
+                xp[j] += step
+                xm = xv.copy()
+                xm[j] -= step
+                yp = y_calc(set_x(xp))
+                ym = y_calc(set_x(xm))
+                cols.append(-sw_all * (yp - ym) / (2.0 * step))
+            return np.stack(cols, axis=1)
 
         # No free parameters: just evaluate at the seed.
         if not varied:

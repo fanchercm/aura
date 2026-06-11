@@ -201,18 +201,20 @@ class ProductionEngine:
     """Composes the production forward model, parametric engine, and minimizer.
 
     Implements all three behavioral Protocols — :class:`~aura.spec.ForwardModel`
-    (``calculate``/``jacobian``), :class:`~aura.spec.ParametricEngine` (``expand``,
-    identity until Phase 5), and :class:`~aura.spec.Minimizer` (``refine``) — so a
-    single object can be passed wherever the oracle expects ``forward``,
-    ``parametric``, or ``minimizer``. The JAX backend (Phase 6) attaches here.
+    (``calculate``/``jacobian``), :class:`~aura.spec.ParametricEngine` (``expand``),
+    and :class:`~aura.spec.Minimizer` (``refine``) — so a single object can be
+    passed wherever the oracle expects ``forward``, ``parametric``, or
+    ``minimizer``. The JAX backend (Phase 6) attaches here.
     """
 
     name = "production-numpy"
 
     def __init__(self) -> None:
         from aura.engine.minimize import ProductionMinimizer
+        from aura.engine.parametric import ProductionParametric
 
         self.forward = ProductionForward()
+        self.parametric = ProductionParametric()
         self.minimizer = ProductionMinimizer()
 
     def calculate(self, state: RefinementState, histogram: Histogram) -> np.ndarray:
@@ -221,12 +223,10 @@ class ProductionEngine:
     def jacobian(self, state: RefinementState, histogram: Histogram) -> np.ndarray:
         return self.forward.jacobian(state, histogram)
 
-    def expand(
-        self, state: RefinementState, histogram: Histogram
-    ) -> RefinementState:  # noqa: ARG002
-        # Identity until the real parametric engine lands (Phase 5). Parametric
-        # models, when present, are resolved here into per-histogram values.
-        return state
+    def expand(self, state: RefinementState, histogram: Histogram) -> RefinementState:
+        # Resolve parametric models into per-histogram effective parameter values
+        # (identity when the state declares no parametric models).
+        return self.parametric.expand(state, histogram)
 
     def refine(self, state, forward, parametric, max_iter=100, tol=1e-8, seed=None):
         return self.minimizer.refine(

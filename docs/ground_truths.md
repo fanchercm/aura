@@ -275,3 +275,51 @@ condition number, profiling diagnostics, and the full provenance manifest.
   real, verifiable result.
 - `test_invariants` unaffected (no spec/reference change). 114 tests pass (88 unit
   + 13 forward + 13 refine); ruff + black clean.
+- **Process lesson**: the Phase-4 commit briefly shipped a black-unclean
+  `forward.py` (a `# noqa` edit after the last black run). **Always run `black`
+  as the final step before committing**, after any post-lint code edits.
+
+### 2026-06-11: Phase 5 — real ParametricEngine (the load-bearing wall)
+
+The core scientific contribution: a single evolving model fit across an ensemble,
+so shared coefficients replace one-parameter-per-pattern (Stinton & Evans 2007).
+
+- **`engine/parametric.py`** — `ProductionParametric.expand(state, hist)`: pure
+  `RefinementState → RefinementState` that evaluates each `ParametricModel.func(
+  coeffs, hist.driving)` and writes the result into the target parameter (identity
+  when no models). **`engine/models_parametric.py`** — `identity_model` (=
+  degenerate per-histogram, reproduces independent refinement), `linear_model`
+  (a0 + slope·driving[var]), `polynomial_model`, `from_callable`.
+  `ProductionEngine.expand` now delegates here.
+- **Minimizer Jacobian refactor (key subtlety)**: with parametric models the
+  *free* parameters are the coefficients (`param:a0`, …), but the forward model
+  reads the *target* (`phase:…:cell.a`). The Phase-4 Jacobian (assembled from
+  `forward.jacobian` over varied params) gave **zero** for coefficients — they
+  don't appear in `calculate`. Fixed by computing the residual Jacobian as a
+  **central FD over the free parameters at the residual level**, with `expand`
+  *inside* the perturbation: perturbing a coefficient re-runs expand and
+  propagates to every driven histogram (the parametric chain rule, numerically).
+  Phase 6 replaces this with autodiff *through* expand. Phase-4 (non-parametric)
+  refinement tests still pass with the new Jacobian.
+- **Category D validated** (`test_production_parametric.py`, 6 tests, ~16s):
+  degenerate identity models == independent refinement to 1e-4 (the strict-
+  generalization claim); a(P)=a0+αP recovered across 5 pressure states
+  (a0→5.970, α→0.020 with σ); **parametric fit reduces per-state RMS scatter vs
+  independent fits** (Stinton–Evans benefit); determinism; expand identity-without-
+  models and driving-resolution + immutability.
+- **Engine-swap (`test_engine_swap.py`, 8 tests)**: both RefEngine and
+  ProductionEngine satisfy the engine-agnostic oracle invariants (Protocol
+  conformance, forward purity, non-negativity, Jacobian-vs-FD self-consistency)
+  via a parametrized fixture — the sound expression of the spec's "swap the
+  engine" goal.
+- **Fixture-parametrization decision (Phase 5d)**: full parametrization of the
+  *refinement* oracle over both engines was **not** done. The oracle's
+  `_make_histogram` generates data with `RefEngine`, so the production engine
+  can't fit it to truth (data/model mismatch) — "one-line fixture swap" is
+  insufficient; engine-self-consistent data is required. Categories C/D/E/F/G are
+  therefore validated for the production engine by the dedicated
+  `test_production_{forward,refine,parametric}.py` suites (self-generated data),
+  and the engine-agnostic subset by `test_engine_swap.py`. Documented rather than
+  forcing a brittle refactor + 2× ~15-min runtime.
+- `test_invariants` unaffected (no spec/reference change). 128 tests pass (88 unit
+  + 40 production/swap physics) + 33 oracle; ruff + black clean. Phase 5 complete.
