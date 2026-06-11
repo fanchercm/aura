@@ -212,9 +212,18 @@ works" prerequisite.**
   `ProductionForward` is tested directly in `test_production_forward.py`. Fixture
   parametrization over `[RefEngine, ProductionEngine]` waits for Phase 4 (when
   `refine` exists), since the shared fixture feeds refine-based invariants.
-- **Deferred**: 11-BM `NAC.fxye` carries **no wavelength** (the peak series
-  implies λ≈0.45–0.51 Å, not a clean value) and likely needs a zero-offset, so
-  the synchrotron CW-X-ray *intensity* correlation is left to Phase-4 refinement
-  (refine λ/zero/scale). X-unit confirmed centidegrees (×100 → impossible >180°).
-- 88 unit tests + 18 new forward/symmetry tests pass; `test_invariants` unaffected
-  (no spec/reference change); ruff + black clean.
+- **11-BM `NAC.fxye` calibrated wavelength = 0.413909 Å** (user-supplied; not
+  stored in the file). At this λ, NAC reflections land exactly on the observed
+  strong peaks — (211)→5.668°, (310)→7.320°, (222)→8.020° — and the NAC forward
+  pattern correlates **+0.48** with the observed 11-BM data. So **CW X-ray
+  real-data alignment is validated** (NAC), alongside TOF (SNAP). My earlier
+  λ-scan missed this because the synchrotron peaks are razor-sharp (~0.006°) and a
+  0.01-Å scan grid stepped over the true value — a lesson that sharp-peak
+  correlation is hypersensitive to λ. X-unit confirmed centidegrees (×100 →
+  impossible >180°). Constant lives in `test_production_forward.py::NAC_11BM_WAVELENGTH`.
+- **Still deferred**: CW *neutron* real-data correlation (PbSO₄) and lab CW X-ray
+  (FAP) — these datasets have **no phase CIF**, so |F|² can't be computed; needs
+  phase files added, or validate at Phase-4 refinement. EDD: no dataset (synthetic
+  round-trip only).
+- 88 unit + 19 forward/symmetry tests pass (incl. NAC CW X-ray real-data check);
+  `test_invariants` unaffected (no spec/reference change); ruff + black clean.

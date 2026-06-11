@@ -34,6 +34,9 @@ from aura.spec import (
 
 DATA_DIR = Path(__file__).parent.parent / "testDataGsas"
 
+# APS 11-BM calibrated wavelength for the NAC dataset (not stored in the .fxye).
+NAC_11BM_WAVELENGTH = 0.413909
+
 NABR = Phase(
     "NaBr",
     "F m -3 m",
@@ -218,3 +221,32 @@ class TestRealDataAlignment:
         assert (
             corr > 0.2
         ), f"NaBr+Pb forward should align with observed peaks, corr={corr:.3f}"
+
+    def test_nac_synchrotron_cw_xray_positive_correlation(self):
+        """An NAC forward pattern aligns with the observed APS 11-BM data using
+        the beamline's calibrated wavelength — closing the CW X-ray real-data
+        validation. (11-BM .fxye carries no wavelength; 0.413909 A is the
+        calibrated value for this dataset.)"""
+        from dataclasses import replace
+
+        nac = io.read(DATA_DIR / "NAC.cif", "phase")
+        h = state_to_histograms(
+            io.read(DATA_DIR / "11BM_NAC.fxye", "powder"),
+            wavelength=NAC_11BM_WAVELENGTH,
+        )[0]
+        # Low-angle window: the strong, well-separated reflections; keeps it fast.
+        m = h.x <= 12.0
+        h = replace(h, x=h.x[m], y_obs=h.y_obs[m], weights=h.weights[m])
+        params = (
+            Parameter(f"hist:{h.id}:scale", ParamKind.HISTOGRAM, 5e-3),
+            Parameter(
+                f"hist:{h.id}:bkg", ParamKind.HISTOGRAM, float(np.median(h.y_obs))
+            ),
+            Parameter(f"hist:{h.id}:fwhm", ParamKind.HISTOGRAM, 0.008),
+            Parameter(f"hist:{h.id}:eta", ParamKind.HISTOGRAM, 0.5),
+        )
+        yc = ProductionForward().calculate(RefinementState((nac,), (h,), params), h)
+        a = yc - yc.mean()
+        b = h.y_obs - h.y_obs.mean()
+        corr = float((a @ b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-30))
+        assert corr > 0.3, f"NAC forward should align with 11-BM peaks, corr={corr:.3f}"
