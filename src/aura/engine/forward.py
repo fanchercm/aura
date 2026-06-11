@@ -76,14 +76,29 @@ class ProductionForward:
     @staticmethod
     def _effective_phase(phase: Phase, pmap: dict[str, float]) -> Phase:
         c = phase.cell
+        pre = f"phase:{phase.name}:cell."
 
         def g(key: str, default: float) -> float:
-            return pmap.get(f"phase:{phase.name}:cell.{key}", default)
+            return pmap.get(f"{pre}{key}", default)
 
+        a = g("a", c.a)
+        b = g("b", c.b)
+        c_ = g("c", c.c)
+        # Cubic convenience: if the base cell is cubic and only `a` is refined
+        # (no explicit b/c parameter), keep the cell cubic so a single parameter
+        # refines a=b=c. Lower-symmetry coupling is expressed by parametric ties
+        # (Phase 5); here it just preserves the common cubic case.
+        is_cubic = c.a == c.b == c.c and c.alpha == c.beta == c.gamma == 90.0
+        if (
+            is_cubic
+            and f"{pre}a" in pmap
+            and not (f"{pre}b" in pmap or f"{pre}c" in pmap)
+        ):
+            b = c_ = a
         cell = UnitCell(
-            g("a", c.a),
-            g("b", c.b),
-            g("c", c.c),
+            a,
+            b,
+            c_,
             g("alpha", c.alpha),
             g("beta", c.beta),
             g("gamma", c.gamma),
@@ -183,20 +198,35 @@ def _add_peak(
 
 
 class ProductionEngine:
-    """Composes the production forward model (and, later, minimizer/parametric).
+    """Composes the production forward model, parametric engine, and minimizer.
 
-    For Phase 3 it implements :class:`aura.spec.ForwardModel` (``calculate`` +
-    ``jacobian``) by delegation. The scipy minimizer (Phase 4), real parametric
-    engine (Phase 5), and JAX backend (Phase 6) attach here.
+    Implements all three behavioral Protocols — :class:`~aura.spec.ForwardModel`
+    (``calculate``/``jacobian``), :class:`~aura.spec.ParametricEngine` (``expand``,
+    identity until Phase 5), and :class:`~aura.spec.Minimizer` (``refine``) — so a
+    single object can be passed wherever the oracle expects ``forward``,
+    ``parametric``, or ``minimizer``. The JAX backend (Phase 6) attaches here.
     """
 
     name = "production-numpy"
 
     def __init__(self) -> None:
+        from aura.engine.minimize import ProductionMinimizer
+
         self.forward = ProductionForward()
+        self.minimizer = ProductionMinimizer()
 
     def calculate(self, state: RefinementState, histogram: Histogram) -> np.ndarray:
         return self.forward.calculate(state, histogram)
 
     def jacobian(self, state: RefinementState, histogram: Histogram) -> np.ndarray:
         return self.forward.jacobian(state, histogram)
+
+    def expand(self, state: RefinementState, histogram: Histogram) -> RefinementState:  # noqa: ARG002
+        # Identity until the real parametric engine lands (Phase 5). Parametric
+        # models, when present, are resolved here into per-histogram values.
+        return state
+
+    def refine(self, state, forward, parametric, max_iter=100, tol=1e-8, seed=None):
+        return self.minimizer.refine(
+            state, forward, parametric, max_iter=max_iter, tol=tol, seed=seed
+        )

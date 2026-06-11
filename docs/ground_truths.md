@@ -235,3 +235,43 @@ works" prerequisite.**
   data checks); `test_invariants` unaffected; ruff + black clean.
 - **Phase 3 COMPLETE**: forward model correct for all 4 data types; every real
   dataset (3 of 4 modalities) validated.
+
+### 2026-06-11: Phase 4 — production minimizer ("first real Rietveld fit")
+
+`src/aura/engine/minimize.py` — `ProductionMinimizer.refine` on
+`scipy.optimize.least_squares` (trust-region reflective, bounded), minimizing the
+weighted residual **stacked across all histograms** (the parametric/surface
+objective). Jacobian assembled from the forward model's own `jacobian` (so the
+minimizer is agnostic to FD-vs-AD). Outputs Rwp, reduced χ², covariance→σ,
+condition number, profiling diagnostics, and the full provenance manifest.
+
+- **`ProductionEngine` now conforms to all three Protocols** (ForwardModel +
+  ParametricEngine + Minimizer): `refine` delegates to the minimizer, `expand`
+  is identity until Phase 5. So one object can be passed as forward/parametric/
+  minimizer (matching the oracle's `engine.refine(st, engine, engine)` call).
+- **Cubic cell shim** in `forward._effective_phase`: if the base cell is cubic
+  and only `cell.a` is refined (no explicit b/c), keep a=b=c — so single-parameter
+  cubic refinement works (the common case + the oracle's convention). Lower-
+  symmetry coupling is via parametric ties (Phase 5).
+- **Validated (categories C/E/F/G) on production-self-generated data**: fixpoint
+  at truth (Rwp=0, exact), parameter recovery within σ, GoF calibration ∈[0.8,1.5]
+  on noisy data, determinism, refined-cell-physical, conditioning reported,
+  zero-weight masking respected, grossly-wrong fixed model → poor Rwp, provenance
+  recorded. 13 tests in `test_production_refine.py`.
+- **Data-coupling insight**: the oracle's `_make_histogram` bakes in `RefEngine`,
+  so the production engine can't be naively dropped into the shared fixture (it
+  would be fitting a *different* model's data). Production refinement tests
+  therefore generate their own self-consistent fixtures. **Full-oracle fixture
+  parametrization over `[RefEngine, ProductionEngine]` is deferred to Phase 5**,
+  when the real `expand` exists (category D needs it).
+- **FIRST REAL RIETVELD FIT** — PbSO₄/D1A CW-neutron (the IUCr round-robin):
+  refines in 2.5s (14 nfev), **Rwp 0.661 → 0.522**, orthorhombic lattice recovered
+  to **a=6.9544, b=8.4727, c=5.3937 Å** (reference 6.955/8.472/5.397) within
+  ~0.001 Å with realistic σ, physical cell. **GoF ≈ 103** is high *and that is
+  correct*: the flat-background / single-width / approximate-LP model is
+  inadequate for real data — the R-factor-non-oracle rule in action (don't trust
+  Rwp alone; GoF exposes model inadequacy). A *good* Rwp awaits the Phase-7
+  background basis + better profile/intensity models. The lattice recovery is the
+  real, verifiable result.
+- `test_invariants` unaffected (no spec/reference change). 114 tests pass (88 unit
+  + 13 forward + 13 refine); ruff + black clean.
