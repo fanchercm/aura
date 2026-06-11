@@ -171,3 +171,50 @@ call site (oracle §13 makes provenance BLOCKING).
   engine should cache the env/git lookups across a campaign's many refines.
 - 79 unit tests pass (10 new BLOCKING provenance tests in `test_provenance.py`);
   ruff + black clean.
+
+### 2026-06-11: Phase 3 — production forward model (all 4 data types)
+
+The first real, non-stub engine component: `src/aura/engine/` with a multi-phase,
+all-data-type forward model on real crystallography. **"First real Rietveld
+works" prerequisite.**
+
+- **`engine/symmetry.py`** — gemmi-backed `generate_reflections(phase, d_min,
+  d_max)`. **Vectorized**: computes every index's d-spacing via the reciprocal
+  metric tensor (`spec.reciprocal_metric_tensor`, numpy einsum) and range-filters
+  in bulk, then calls gemmi only per *observable* reflection for absence +
+  symmetry orbit. NAC d≥0.41 Å: 1486 reflections in **0.25s** (a naive per-hkl
+  gemmi loop took minutes). Multiplicity = symmetry+Friedel orbit size.
+- **Crystallographic correctness validated**: FCC multiplicities 111→8, 200→6,
+  220→12, 311→24; F-centring absences (100/110/210 absent); and the subtle
+  **Laue m-3 vs m-3m** distinction — NAC (I2₁3, point group 23 → Laue m-3)
+  correctly *splits* {310}/{301} into two orbits (mult 12 each), which only
+  happens with the true point group, not an assumed m-3m.
+- **`engine/scattering.py`** — real factors via gemmi: X-ray `Element.it92.calculate_sf(stol2)`
+  (Q-dependent, f(0)≈Z), neutron `Element.neutron92.calculate_sf` (constant b,
+  Na=3.63 fm). `stol2 = 1/(4d²)`.
+- **`engine/positions.py`** — `position(d, hist)` dispatches to the spec CW/TOF/EDD
+  laws; `d_range_for_histogram` inverts over the x-range to bound generation
+  (caps the low-angle d→∞ edge).
+- **`engine/forward.py`** — `ProductionForward` (multi-phase; intensity = scale ·
+  phase_scale · multiplicity · |F|² · LP; flat bkg) with **windowed** peak
+  evaluation (±12·FWHM via `searchsorted` → O(points × nearby_peaks), the Phase-8
+  invariant) and FD Jacobian. Reflection generation cached per (hashable Phase,
+  rounded d-range). Parameter convention: `phase:<name>:cell.{a..gamma}`,
+  `phase:<name>:atom<i>.{x,y,z,occ,b_iso}`, `phase_scale:<phase>:<hist>`,
+  `hist:<id>:{scale,bkg,fwhm,eta}` — absent keys fall back to the phase/default.
+  `ProductionEngine` composes it (minimizer/parametric/JAX attach in Phases 4-6).
+- **Validation**: forward purity / non-negativity / Jacobian shape; **peak
+  positions exact** — all in-range predicted peaks have the calc maximum at the
+  predicted angle, equal to the analytic Bragg 2θ to 1e-9. **Real TOF data**:
+  NaBr+Pb forward correlates +0.315 with observed SNAP — predicted Bragg peaks
+  fall where the data has intensity.
+- **Fixture note**: the shared `engine` fixture stays on `RefEngine`;
+  `ProductionForward` is tested directly in `test_production_forward.py`. Fixture
+  parametrization over `[RefEngine, ProductionEngine]` waits for Phase 4 (when
+  `refine` exists), since the shared fixture feeds refine-based invariants.
+- **Deferred**: 11-BM `NAC.fxye` carries **no wavelength** (the peak series
+  implies λ≈0.45–0.51 Å, not a clean value) and likely needs a zero-offset, so
+  the synchrotron CW-X-ray *intensity* correlation is left to Phase-4 refinement
+  (refine λ/zero/scale). X-unit confirmed centidegrees (×100 → impossible >180°).
+- 88 unit tests + 18 new forward/symmetry tests pass; `test_invariants` unaffected
+  (no spec/reference change); ruff + black clean.
