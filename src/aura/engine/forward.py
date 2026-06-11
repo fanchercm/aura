@@ -74,6 +74,10 @@ class ProductionForward:
         # preferred-orientation correction (MarchDollase) applied in the loop.
         self.domain_modules = tuple(domain_modules)
         self.texture = texture
+        # Profiling: total (point, reflection) profile evaluations in the last
+        # calculate(). Windowing keeps this ~ n_reflections * window_points, i.e.
+        # O(points x nearby_peaks), not O(points x all_peaks).
+        self.peak_point_ops = 0
 
     # ---- parameter resolution -----------------------------------------------
     @staticmethod
@@ -137,6 +141,7 @@ class ProductionForward:
         eta = pmap.get(f"hist:{hid}:eta", 0.5)
 
         y = np.full_like(x, bkg)
+        self.peak_point_ops = 0
         if fwhm <= 0 or x.size == 0:
             return y
 
@@ -166,7 +171,9 @@ class ProductionForward:
                 if texture is not None:
                     amp *= texture.factor(r.hkl, eff.cell, march_ratio)
                 if amp != 0.0:
-                    _add_peak(y, x, pos, fwhm, eta, amp, self.peak_window)
+                    self.peak_point_ops += _add_peak(
+                        y, x, pos, fwhm, eta, amp, self.peak_window
+                    )
 
         for module in self.domain_modules:
             y = module.contribute(state, histogram, y)
@@ -201,20 +208,22 @@ def _add_peak(
     eta: float,
     amplitude: float,
     window: float,
-) -> None:
+) -> int:
     """Add a pseudo-Voigt peak to *y* over the ``±window·fwhm`` neighborhood only.
 
     Assumes *x* is sorted ascending (true for all reader outputs). A peak whose
     center is far outside the measured range contributes nothing; one near an
-    edge contributes only its in-range tail.
+    edge contributes only its in-range tail. Returns the number of points written
+    (for the O(points × nearby_peaks) scaling counter).
     """
     half = window * fwhm
     lo = int(np.searchsorted(x, center - half, side="left"))
     hi = int(np.searchsorted(x, center + half, side="right"))
     if hi <= lo:
-        return
+        return 0
     seg = x[lo:hi]
     y[lo:hi] += amplitude * spec.pseudo_voigt(seg, center, fwhm, eta)
+    return hi - lo
 
 
 class ProductionEngine:

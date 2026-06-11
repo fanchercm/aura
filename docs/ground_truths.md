@@ -394,3 +394,38 @@ reading their refinable coefficients from `state.parameters`.
   Background/texture in the JAX backend (numpy-only for now).
 - 44 production+domain tests pass (10 new in `test_domains.py`); `test_invariants`
   unaffected; ruff + black clean. Phase 7 complete.
+
+### 2026-06-11: Phase 8 — scale, chunking, checkpointing
+
+PERF requirements: ~10⁵ patterns, chunked not dense (PERF-1/2/3), parallel forward
+eval (PERF-4), checkpoint/restart (UX-5), profiling hooks (PERF-6).
+
+- **O(points × nearby_peaks) scaling invariant**: `ProductionForward.peak_point_ops`
+  counts windowed profile-point writes per `calculate`. On a 4000-pt NaBr pattern,
+  windowed ops are <20% of the naive `n_refl × n_points`; doubling grid density
+  ~doubles ops (linear, not quadratic) — confirming each peak touches a fixed
+  angular window regardless of total reflections. (`tests/performance/test_scale.py`.)
+- **`ChunkedMinimizer`** (`engine/chunked.py`): Gauss–Newton that **accumulates the
+  normal equations** `JᵀJ` (N_params²) and `Jᵀr` one histogram at a time, folding
+  each block in and discarding it — peak memory `O(N_params²)` + the largest single
+  histogram, **independent of the number of patterns** (PERF-3, the "no dense
+  all-at-once" requirement). Per-histogram residual-Jacobian via FD with `expand`
+  inside (handles parametric, like Phase 5); blocks are independent so they
+  parallelize over histograms via a `ThreadPoolExecutor` (PERF-4). Validated to
+  recover the **same cell as the SciPy minimizer** (1e-4) on a single state, and to
+  refine a 12-histogram shared-cell ensemble.
+- **Checkpoint/restart** (`checkpoint.py`): `save_refinement`/`load_refinement`
+  (pickle; trusted self-produced files) round-trip the immutable state exactly;
+  `resume(engine, path)` continues refining. `parametric_models` carry callables
+  (not portably serializable) so they're dropped on save with their
+  target/coeff-names preserved, and re-attached via `restore_models` on load.
+- **Memory stability** (`@pytest.mark.slow`): 400 sequential `calculate`s grow RSS
+  <5% — no per-pattern accumulation.
+- **Deliberately demonstrated, not brute-forced**: the 10⁴-pattern campaign claim
+  is evidenced by the scaling counter (per-peak cost is grid-local) + the
+  bounded-memory accumulation + the memory-stability loop, rather than an actual
+  10⁴-pattern refinement (too slow for CI). **Deferred**: Dask/MPI out-of-core +
+  cluster execution (the chunked accumulator is the interface they'd slot behind);
+  staged/block (fit-by-block) scheduling beyond the per-histogram chunking.
+- 8 scale tests pass; full production suite unaffected; ruff + black clean.
+  Phase 8 complete.
