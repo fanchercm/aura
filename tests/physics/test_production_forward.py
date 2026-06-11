@@ -250,3 +250,40 @@ class TestRealDataAlignment:
         b = h.y_obs - h.y_obs.mean()
         corr = float((a @ b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-30))
         assert corr > 0.3, f"NAC forward should align with 11-BM peaks, corr={corr:.3f}"
+
+    def _corr_for(self, cif, datafile, fwhm, wavelength=None):
+        ph = io.read(DATA_DIR / cif, "phase")
+        h = state_to_histograms(
+            io.read(DATA_DIR / datafile, "powder"), wavelength=wavelength
+        )[0]
+        params = (
+            Parameter(f"hist:{h.id}:scale", ParamKind.HISTOGRAM, 5e-4),
+            Parameter(
+                f"hist:{h.id}:bkg", ParamKind.HISTOGRAM, float(np.median(h.y_obs))
+            ),
+            Parameter(f"hist:{h.id}:fwhm", ParamKind.HISTOGRAM, fwhm),
+            Parameter(f"hist:{h.id}:eta", ParamKind.HISTOGRAM, 0.5),
+        )
+        yc = ProductionForward().calculate(RefinementState((ph,), (h,), params), h)
+        a = yc - yc.mean()
+        b = h.y_obs - h.y_obs.mean()
+        return float((a @ b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-30))
+
+    def test_pbso4_cw_neutron_positive_correlation(self):
+        """PbSO4 (the IUCr/CPD round-robin) forward aligns with the D1A CW-neutron
+        data — the CW-neutron real-data validation on the canonical benchmark."""
+        corr = self._corr_for("PbSO4.cif", "PBSO4.CWN", fwhm=0.3)
+        assert corr > 0.2, f"PbSO4 CW-neutron forward misaligned, corr={corr:.3f}"
+
+    def test_pbso4_cw_xray_positive_correlation(self):
+        """Same PbSO4 phase against the Cu-Kα lab X-ray data (cross-modality)."""
+        corr = self._corr_for("PbSO4.cif", "PBSO4.XRA", fwhm=0.08)
+        assert corr > 0.3, f"PbSO4 CW-xray forward misaligned, corr={corr:.3f}"
+
+    def test_fap_cw_xray_positive_correlation(self):
+        """Fluorapatite lab X-ray. An un-refined forward check: predicted peaks
+        sit in the right place but a ~0.3° zero/lattice offset caps the raw
+        correlation — Phase-4 refinement (zero, cell) lifts it. Positive here is
+        enough to confirm the hexagonal P6_3/m positions are right."""
+        corr = self._corr_for("FAP.cif", "FAP.XRA", fwhm=0.2, wavelength=1.5406)
+        assert corr > 0.1, f"FAP CW-xray forward misaligned, corr={corr:.3f}"

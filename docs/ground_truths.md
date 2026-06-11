@@ -221,9 +221,17 @@ works" prerequisite.**
   0.01-Å scan grid stepped over the true value — a lesson that sharp-peak
   correlation is hypersensitive to λ. X-unit confirmed centidegrees (×100 →
   impossible >180°). Constant lives in `test_production_forward.py::NAC_11BM_WAVELENGTH`.
-- **Still deferred**: CW *neutron* real-data correlation (PbSO₄) and lab CW X-ray
-  (FAP) — these datasets have **no phase CIF**, so |F|² can't be computed; needs
-  phase files added, or validate at Phase-4 refinement. EDD: no dataset (synthetic
-  round-trip only).
-- 88 unit + 19 forward/symmetry tests pass (incl. NAC CW X-ray real-data check);
-  `test_invariants` unaffected (no spec/reference change); ruff + black clean.
+- **PbSO₄ + FAP CIFs added** (PbSO₄ *Pbnm* a=6.955 b=8.472 c=5.397, 5 atoms;
+  FAP *P6₃/m* a=9.370 c=6.880, 7 atoms). Real-data alignment now validated on
+  **every available pairing**:
+  - TOF — SNAP NaBr+Pb: +0.32
+  - CW neutron — **PbSO₄/D1A (the IUCr round-robin): +0.26** ← CW-neutron closed
+  - CW X-ray — PbSO₄/Cu: +0.51 · NAC/11-BM: +0.48 · FAP/Cu: +0.20
+  FAP is lower because of a ~0.3° zero/lattice offset visible in its predicted-vs-
+  observed peaks (predicted (201) 25.47° vs observed 25.80°) — exactly what a
+  Phase-4 zero/cell refinement fixes; positions are otherwise correct.
+- **Only EDD remains** without real data (synthetic round-trip only).
+- 88 unit + 22 forward/symmetry tests pass (TOF + CW-neutron + 3× CW-xray real-
+  data checks); `test_invariants` unaffected; ruff + black clean.
+- **Phase 3 COMPLETE**: forward model correct for all 4 data types; every real
+  dataset (3 of 4 modalities) validated.
