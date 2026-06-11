@@ -72,7 +72,9 @@ class RefEngine:
         return [p for p in state.parameters if p.vary]
 
     # ---- ParametricEngine.expand --------------------------------------------
-    def expand(self, state: RefinementState, histogram: spec.Histogram) -> RefinementState:
+    def expand(
+        self, state: RefinementState, histogram: spec.Histogram
+    ) -> RefinementState:
         """Resolve every ParametricModel to a concrete value for this histogram."""
         pmap = self._pmap(state)
         new_params = list(state.parameters)
@@ -86,13 +88,19 @@ class RefEngine:
         return replace(state, parameters=tuple(new_params))
 
     # ---- ForwardModel.calculate ---------------------------------------------
-    def calculate(self, state: RefinementState, histogram: spec.Histogram) -> np.ndarray:
+    def calculate(
+        self, state: RefinementState, histogram: spec.Histogram
+    ) -> np.ndarray:
         st = self.expand(state, histogram)
         pmap = self._pmap(st)
         phase = st.phases[0]
         # effective cell parameter "a" may be driven; read from params if present
         a = pmap.get(f"phase:{phase.name}:cell.a")
-        cell = phase.cell if a is None else replace(phase.cell, a=a.value, b=a.value, c=a.value)
+        cell = (
+            phase.cell
+            if a is None
+            else replace(phase.cell, a=a.value, b=a.value, c=a.value)
+        )
         scale = pmap[f"hist:{histogram.id}:scale"].value
         bkg = pmap[f"hist:{histogram.id}:bkg"].value
         fwhm = pmap[f"hist:{histogram.id}:fwhm"].value
@@ -100,33 +108,43 @@ class RefEngine:
         f = {at.element: 14.0 for at in phase.atoms}
 
         y = np.full_like(histogram.x, bkg)
-        for hkl, d, _tt in _reflections_cubic_cached(round(cell.a, 6), histogram.wavelength):
+        for hkl, d, _tt in _reflections_cubic_cached(
+            round(cell.a, 6), histogram.wavelength
+        ):
             tt = spec.two_theta_from_d(d, histogram.wavelength)
             Fsq = abs(spec.structure_factor(hkl, phase.atoms, cell, f)) ** 2
             # crude Lorentz-polarization + multiplicity proxy for the reference
-            lp = 1.0 / (math.sin(math.radians(tt / 2.0)) ** 2 * math.cos(math.radians(tt / 2.0)))
+            lp = 1.0 / (
+                math.sin(math.radians(tt / 2.0)) ** 2 * math.cos(math.radians(tt / 2.0))
+            )
             y = y + scale * Fsq * lp * spec.pseudo_voigt(histogram.x, tt, fwhm, eta)
         return y
 
     # ---- ForwardModel.jacobian (finite-difference REFERENCE only) ------------
     def jacobian(self, state: RefinementState, histogram: spec.Histogram) -> np.ndarray:
         varied = self._varied(state)
-        base = self.calculate(state, histogram)  # noqa: F841 (kept for parity/readability)
         J = np.zeros((len(histogram.x), len(varied)))
         for j, p in enumerate(varied):
             h = 1e-6 * max(abs(p.value), 1.0)
             up = self._perturb(state, p.name, p.value + h)
             dn = self._perturb(state, p.name, p.value - h)
-            J[:, j] = (self.calculate(up, histogram) - self.calculate(dn, histogram)) / (2 * h)
+            J[:, j] = (
+                self.calculate(up, histogram) - self.calculate(dn, histogram)
+            ) / (2 * h)
         return J
 
-    def _perturb(self, state: RefinementState, name: str, value: float) -> RefinementState:
-        params = tuple(replace(p, value=value) if p.name == name else p
-                       for p in state.parameters)
+    def _perturb(
+        self, state: RefinementState, name: str, value: float
+    ) -> RefinementState:
+        params = tuple(
+            replace(p, value=value) if p.name == name else p for p in state.parameters
+        )
         return replace(state, parameters=params)
 
     # ---- Minimizer.refine (Gauss–Newton over the FULL ensemble) -------------
-    def refine(self, state, forward, parametric, max_iter=100, tol=1e-8) -> RefinementResult:
+    def refine(
+        self, state, forward, parametric, max_iter=100, tol=1e-8
+    ) -> RefinementResult:
         varied = self._varied(state)
         names = [p.name for p in varied]
         x = np.array([p.value for p in varied], dtype=float)
@@ -135,7 +153,9 @@ class RefEngine:
 
         def set_x(xv: np.ndarray) -> RefinementState:
             pm = {n: v for n, v in zip(names, xv)}
-            params = tuple(replace(p, value=pm.get(p.name, p.value)) for p in state.parameters)
+            params = tuple(
+                replace(p, value=pm.get(p.name, p.value)) for p in state.parameters
+            )
             return replace(state, parameters=params)
 
         converged = False
@@ -182,11 +202,18 @@ class RefEngine:
         params = []
         sig_map = {n: s for n, s in zip(names, sig)}
         for p in cur.parameters:
-            params.append(replace(p, sigma=sig_map.get(p.name)) if p.name in sig_map else p)
+            params.append(
+                replace(p, sigma=sig_map.get(p.name)) if p.name in sig_map else p
+            )
         result_state = replace(cur, parameters=tuple(params)).with_log(
-            f"refined: {len(varied)} params, {it} iters, converged={converged}")
+            f"refined: {len(varied)} params, {it} iters, converged={converged}"
+        )
         return RefinementResult(
-            state=result_state, rwp=spec.rwp(yo, yc, w), reduced_chi2=gof,
-            converged=converged, n_iterations=it, covariance=cov,
+            state=result_state,
+            rwp=spec.rwp(yo, yc, w),
+            reduced_chi2=gof,
+            converged=converged,
+            n_iterations=it,
+            covariance=cov,
             diagnostics={"condition_number": float(np.linalg.cond(JTJ))},
         )

@@ -150,9 +150,7 @@ class MeasurementState:
         raise KeyError(f"No slice with id={slice_id!r} in state {self.id!r}")
 
     def __repr__(self) -> str:
-        return (
-            f"MeasurementState(id={self.id!r}, n_slices={self.n_slices})"
-        )
+        return f"MeasurementState(id={self.id!r}, n_slices={self.n_slices})"
 
 
 @dataclass

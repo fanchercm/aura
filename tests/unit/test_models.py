@@ -10,10 +10,10 @@ from aura.models import (
     ParameterScope,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_slice(
     slice_id: str = "test_bank1",
@@ -41,10 +41,7 @@ def _make_state(
     n_banks: int = 3,
 ) -> MeasurementState:
     """Create a MeasurementState with several slices."""
-    slices = [
-        _make_slice(slice_id=f"{state_id}_bank{i+1}")
-        for i in range(n_banks)
-    ]
+    slices = [_make_slice(slice_id=f"{state_id}_bank{i+1}") for i in range(n_banks)]
     return MeasurementState(
         id=state_id,
         slices=slices,
@@ -55,6 +52,7 @@ def _make_state(
 # ---------------------------------------------------------------------------
 # ParameterScope
 # ---------------------------------------------------------------------------
+
 
 class TestParameterScope:
     def test_scope_values(self):
@@ -69,6 +67,7 @@ class TestParameterScope:
 # ---------------------------------------------------------------------------
 # DiffractionSlice
 # ---------------------------------------------------------------------------
+
 
 class TestDiffractionSlice:
     def test_creation(self):
@@ -120,6 +119,7 @@ class TestDiffractionSlice:
 # MeasurementState
 # ---------------------------------------------------------------------------
 
+
 class TestMeasurementState:
     def test_creation(self):
         st = _make_state()
@@ -148,6 +148,7 @@ class TestMeasurementState:
 # ---------------------------------------------------------------------------
 # Campaign
 # ---------------------------------------------------------------------------
+
 
 class TestCampaign:
     def test_creation(self):

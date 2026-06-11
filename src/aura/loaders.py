@@ -22,7 +22,6 @@ import numpy as np
 
 from aura.models import Campaign, DiffractionSlice, MeasurementState
 
-
 # ---------------------------------------------------------------------------
 # .gsa (GSAS column) loader
 # ---------------------------------------------------------------------------
@@ -189,6 +188,7 @@ def load_gsa_file(path: str | Path) -> MeasurementState:
 # .instprm loader
 # ---------------------------------------------------------------------------
 
+
 def load_instprm(path: str | Path) -> dict[int, dict[str, Any]]:
     """Load a GSAS-II instrument parameter file.
 
@@ -246,6 +246,7 @@ def load_instprm(path: str | Path) -> dict[int, dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Directory-level loader → Campaign
 # ---------------------------------------------------------------------------
+
 
 def load_campaign_from_directory(
     directory: str | Path,

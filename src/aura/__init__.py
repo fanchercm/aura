@@ -3,6 +3,11 @@ Aura - Prototype framework for large-volume Rietveld analysis.
 
 Explores solutions for high-throughput Rietveld refinement of
 partially integrated diffraction data at scale.
+
+The authoritative refinement model lives in :mod:`aura.spec` (immutable
+``RefinementState``/``Phase``/``Histogram``/``Parameter`` + the engine
+Protocols). The container/ingest layer (:mod:`aura.models`) and the importer
+registry (:mod:`aura.io`) feed it via the one-way :mod:`aura.bridge`.
 """
 
 __version__ = "0.1.0"
@@ -13,25 +18,11 @@ from aura.models import (
     MeasurementState,
     ParameterScope,
 )
-from aura.parameters import (
-    Constraint,
-    Parameter,
-    ParameterSet,
-    RefinementModel,
-    equality_constraint,
-    linear_constraint,
-)
 
 __all__ = [
     "__version__",
     "Campaign",
-    "Constraint",
     "DiffractionSlice",
     "MeasurementState",
-    "Parameter",
     "ParameterScope",
-    "ParameterSet",
-    "RefinementModel",
-    "equality_constraint",
-    "linear_constraint",
 ]

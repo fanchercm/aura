@@ -29,6 +29,7 @@ dependencies = [
     "click>=8.1.0",
     "tqdm>=4.66.0",
     "pyyaml>=6.0",
+    "gemmi>=0.6.0",
 ]
 
 [project.optional-dependencies]
@@ -121,9 +122,15 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # Allow unused imports in __init__.py
+# The executable spec and reference oracle are kept faithful to the authored
+# deliverable: `l` is the crystallographic Miller index, the Minimizer signature
+# is fixed by the Protocol, and the numpy engine style is intentional.
+"src/aura/spec.py" = ["E741"]
+"src/aura/reference.py" = ["E741", "ARG002", "B007", "C416", "B905"]
 "tests/**/*.py" = [
     "ARG",    # Unused function arguments in tests are OK (fixtures)
     "S101",   # Assert statements are OK in tests
+    "B905",   # zip() without strict= is fine in test scaffolding
 ]
 
 [tool.ruff.lint.isort]

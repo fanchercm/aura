@@ -17,6 +17,7 @@ INSTPRM = DATA_DIR / "SNAP066787_column.instprm"
 # Preconditions
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _check_data_exists():
     """Skip all tests in this module if test data is absent."""
@@ -27,6 +28,7 @@ def _check_data_exists():
 # ---------------------------------------------------------------------------
 # load_gsa_file
 # ---------------------------------------------------------------------------
+
 
 class TestLoadGsaFile:
     def test_loads_single_file(self):
@@ -89,6 +91,7 @@ class TestLoadGsaFile:
 # load_instprm
 # ---------------------------------------------------------------------------
 
+
 class TestLoadInstprm:
     def test_loads_all_banks(self):
         params = load_instprm(INSTPRM)
@@ -114,6 +117,7 @@ class TestLoadInstprm:
 # ---------------------------------------------------------------------------
 # load_campaign_from_directory
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.integration
 class TestLoadCampaign:

@@ -37,8 +37,8 @@ Run:  pytest -v tests/physics/test_invariants.py
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from typing import Mapping, Sequence
 
 import numpy as np
 import pytest
@@ -46,8 +46,17 @@ import pytest
 from aura import spec
 from aura.reference import RefEngine
 from aura.spec import (
-    ACCEPTANCE, AtomSite, DataType, Histogram, Parameter, ParamKind,
-    ParametricModel, Phase, RefinementResult, RefinementState, UnitCell,
+    ACCEPTANCE,
+    AtomSite,
+    DataType,
+    Histogram,
+    Parameter,
+    ParametricModel,
+    ParamKind,
+    Phase,
+    RefinementResult,
+    RefinementState,
+    UnitCell,
 )
 
 RNG = np.random.default_rng(20240610)
@@ -57,8 +66,12 @@ RNG = np.random.default_rng(20240610)
 # Shared synthetic-data builders
 # =============================================================================
 
-SI = (AtomSite("Si", 0, 0, 0), AtomSite("Si", 0.5, 0.5, 0.5),
-      AtomSite("Si", 0.5, 0.0, 0.5), AtomSite("Si", 0.0, 0.5, 0.5))
+SI = (
+    AtomSite("Si", 0, 0, 0),
+    AtomSite("Si", 0.5, 0.5, 0.5),
+    AtomSite("Si", 0.5, 0.0, 0.5),
+    AtomSite("Si", 0.0, 0.5, 0.5),
+)
 A0 = 5.431
 WL = 1.5406
 
@@ -69,30 +82,75 @@ def _silicon_phase(a: float = A0) -> Phase:
 
 def _base_params(hist_id: str, a: float = A0, vary_a: bool = True) -> list[Parameter]:
     return [
-        Parameter(f"phase:Si:cell.a", ParamKind.PHASE, a, vary=vary_a, lower=5.0, upper=6.0),
-        Parameter(f"hist:{hist_id}:scale", ParamKind.HISTOGRAM, 1.0, vary=True, lower=1e-6, upper=1e6),
-        Parameter(f"hist:{hist_id}:bkg", ParamKind.HISTOGRAM, 5.0, vary=True, lower=0, upper=1e4),
-        Parameter(f"hist:{hist_id}:fwhm", ParamKind.HISTOGRAM, 0.20, vary=True, lower=0.02, upper=2.0),
-        Parameter(f"hist:{hist_id}:eta", ParamKind.HISTOGRAM, 0.5, vary=False, lower=0, upper=1),
+        Parameter(
+            "phase:Si:cell.a", ParamKind.PHASE, a, vary=vary_a, lower=5.0, upper=6.0
+        ),
+        Parameter(
+            f"hist:{hist_id}:scale",
+            ParamKind.HISTOGRAM,
+            1.0,
+            vary=True,
+            lower=1e-6,
+            upper=1e6,
+        ),
+        Parameter(
+            f"hist:{hist_id}:bkg",
+            ParamKind.HISTOGRAM,
+            5.0,
+            vary=True,
+            lower=0,
+            upper=1e4,
+        ),
+        Parameter(
+            f"hist:{hist_id}:fwhm",
+            ParamKind.HISTOGRAM,
+            0.20,
+            vary=True,
+            lower=0.02,
+            upper=2.0,
+        ),
+        Parameter(
+            f"hist:{hist_id}:eta",
+            ParamKind.HISTOGRAM,
+            0.5,
+            vary=False,
+            lower=0,
+            upper=1,
+        ),
     ]
 
 
-def _make_histogram(hist_id: str, a_true: float, driving: Mapping[str, float],
-                    noise: float = 0.0, scale: float = 1.0, bkg: float = 5.0) -> Histogram:
+def _make_histogram(
+    hist_id: str,
+    a_true: float,
+    driving: Mapping[str, float],
+    noise: float = 0.0,
+    scale: float = 1.0,
+    bkg: float = 5.0,
+) -> Histogram:
     x = np.linspace(10.0, 120.0, 900)
     phase = _silicon_phase(a_true)
     eng = RefEngine()
     truth_state = RefinementState(
         phases=(phase,),
-        histograms=(Histogram(hist_id, DataType.CW_XRAY, x, x * 0, np.ones_like(x),
-                              driving, wavelength=WL),),
-        parameters=tuple([
+        histograms=(
+            Histogram(
+                hist_id,
+                DataType.CW_XRAY,
+                x,
+                x * 0,
+                np.ones_like(x),
+                driving,
+                wavelength=WL,
+            ),
+        ),
+        parameters=(
             Parameter("phase:Si:cell.a", ParamKind.PHASE, a_true),
             Parameter(f"hist:{hist_id}:scale", ParamKind.HISTOGRAM, scale),
             Parameter(f"hist:{hist_id}:bkg", ParamKind.HISTOGRAM, bkg),
             Parameter(f"hist:{hist_id}:fwhm", ParamKind.HISTOGRAM, 0.20),
             Parameter(f"hist:{hist_id}:eta", ParamKind.HISTOGRAM, 0.5),
-        ]),
+        ),
     )
     y = eng.calculate(truth_state, truth_state.histograms[0])
     if noise > 0:
@@ -105,10 +163,18 @@ def _make_histogram(hist_id: str, a_true: float, driving: Mapping[str, float],
 # A. Crystallographic identities
 # =============================================================================
 
+
 class TestCrystallography:
 
-    @pytest.mark.parametrize("hkl_a,hkl_b", [((2,0,0),(0,2,0)), ((1,1,1),(1,-1,1)),
-                                             ((3,1,1),(1,3,1)), ((4,2,0),(0,2,4))])
+    @pytest.mark.parametrize(
+        "hkl_a,hkl_b",
+        [
+            ((2, 0, 0), (0, 2, 0)),
+            ((1, 1, 1), (1, -1, 1)),
+            ((3, 1, 1), (1, 3, 1)),
+            ((4, 2, 0), (0, 2, 4)),
+        ],
+    )
     def test_cubic_symmetry_preserves_d_and_F(self, hkl_a, hkl_b):
         """In m-3m, permutation/sign of indices preserves d and |F| (Laue symmetry).
 
@@ -117,7 +183,9 @@ class TestCrystallography:
         """
         cell = UnitCell(A0, A0, A0)
         f = {"Si": 14.0}
-        assert math.isclose(spec.d_spacing(hkl_a, cell), spec.d_spacing(hkl_b, cell), rel_tol=1e-12)
+        assert math.isclose(
+            spec.d_spacing(hkl_a, cell), spec.d_spacing(hkl_b, cell), rel_tol=1e-12
+        )
         Fa = abs(spec.structure_factor(hkl_a, SI, cell, f))
         Fb = abs(spec.structure_factor(hkl_b, SI, cell, f))
         assert math.isclose(Fa, Fb, rel_tol=1e-9)
@@ -126,14 +194,21 @@ class TestCrystallography:
         """|F(hkl)| == |F(-h-k-l)| for non-anomalous scattering."""
         cell = UnitCell(A0, A0, A0)
         f = {"Si": 14.0}
-        for hkl in [(1,1,1),(3,1,1),(2,2,0)]:
+        for hkl in [(1, 1, 1), (3, 1, 1), (2, 2, 0)]:
             neg = tuple(-i for i in hkl)
-            assert math.isclose(abs(spec.structure_factor(hkl, SI, cell, f)),
-                                abs(spec.structure_factor(neg, SI, cell, f)), rel_tol=1e-9)
+            assert math.isclose(
+                abs(spec.structure_factor(hkl, SI, cell, f)),
+                abs(spec.structure_factor(neg, SI, cell, f)),
+                rel_tol=1e-9,
+            )
 
     def test_metric_tensor_spd_for_physical_cells(self):
-        for cell in [UnitCell(5,5,5), UnitCell(3,4,5,90,90,90),
-                     UnitCell(5,5,8,90,90,120), UnitCell(7,8,9,80,85,95)]:
+        for cell in [
+            UnitCell(5, 5, 5),
+            UnitCell(3, 4, 5, 90, 90, 90),
+            UnitCell(5, 5, 8, 90, 90, 120),
+            UnitCell(7, 8, 9, 80, 85, 95),
+        ]:
             G = spec.metric_tensor(*cell.as_tuple())
             assert np.allclose(G, G.T), "Metric tensor must be symmetric."
             assert np.min(np.linalg.eigvalsh(G)) > ACCEPTANCE["metric_min_eig"]
@@ -151,7 +226,7 @@ class TestCrystallography:
             tt = spec.two_theta_from_d(d, WL)
             d_back = WL / (2.0 * math.sin(math.radians(tt) / 2.0))
         elif dtype is DataType.TOF:
-            tof = spec.tof_from_d(d, difc=5000.0)        # pure DIFC -> linear, invertible
+            tof = spec.tof_from_d(d, difc=5000.0)  # pure DIFC -> linear, invertible
             d_back = tof / 5000.0
         else:  # EDD
             e = spec.energy_from_d(d, two_theta_deg=15.0)
@@ -162,6 +237,7 @@ class TestCrystallography:
 # =============================================================================
 # B. Forward-model & Jacobian correctness
 # =============================================================================
+
 
 class TestForwardAndJacobian:
 
@@ -191,35 +267,53 @@ class TestForwardAndJacobian:
 
         # Independent FD reference (does not reuse engine.jacobian internals)
         varied = [p for p in st.parameters if p.vary]
-        base = engine.calculate(st, h)
         J_fd = np.zeros_like(J_engine)
         for j, p in enumerate(varied):
             step = 1e-6 * max(abs(p.value), 1.0)
-            up = replace(st, parameters=tuple(
-                replace(q, value=q.value + step) if q.name == p.name else q for q in st.parameters))
-            dn = replace(st, parameters=tuple(
-                replace(q, value=q.value - step) if q.name == p.name else q for q in st.parameters))
-            J_fd[:, j] = (engine.calculate(up, h) - engine.calculate(dn, h)) / (2 * step)
+            up = replace(
+                st,
+                parameters=tuple(
+                    replace(q, value=q.value + step) if q.name == p.name else q
+                    for q in st.parameters
+                ),
+            )
+            dn = replace(
+                st,
+                parameters=tuple(
+                    replace(q, value=q.value - step) if q.name == p.name else q
+                    for q in st.parameters
+                ),
+            )
+            J_fd[:, j] = (engine.calculate(up, h) - engine.calculate(dn, h)) / (
+                2 * step
+            )
 
         # compare columns by relative norm (robust to scale differences per parameter)
         for j in range(J_engine.shape[1]):
             num = np.linalg.norm(J_engine[:, j] - J_fd[:, j])
             den = np.linalg.norm(J_fd[:, j]) + 1e-30
-            assert num / den < 1e-3, f"Jacobian column {j} disagrees with FD: {num/den:.2e}"
+            assert (
+                num / den < 1e-3
+            ), f"Jacobian column {j} disagrees with FD: {num/den:.2e}"
 
 
 # =============================================================================
 # C. Refinement correctness
 # =============================================================================
 
+
 class TestRefinementCorrectness:
 
     def test_fixpoint_seeded_at_truth(self, engine):
         """Noise-free data seeded at the true parameters must not move (gradient ~ 0)."""
         h = _make_histogram("h0", A0, {"T": 300.0}, noise=0.0)
-        st = RefinementState((_silicon_phase(A0),), (h,), tuple(_base_params("h0", a=A0)))
+        st = RefinementState(
+            (_silicon_phase(A0),), (h,), tuple(_base_params("h0", a=A0))
+        )
         res = engine.refine(st, engine, engine, max_iter=50)
-        a_ref = next(p.value for p in res.state.parameters if p.name == "phase:Si:cell.a")
+        a_ref = next(
+            p.value for p in res.state.parameters if p.name == "phase:Si:cell.a"
+        )
         assert abs(a_ref - A0) < 1e-4, f"Cell moved from truth: {a_ref} vs {A0}"
         assert res.rwp < 1e-3, f"Rwp should be ~0 on noise-free truth, got {res.rwp}"
 
@@ -227,27 +321,36 @@ class TestRefinementCorrectness:
         """Refining noisy synthetic data recovers the true cell within n*sigma."""
         a_true = 5.470
         h = _make_histogram("h0", a_true, {"T": 300.0}, noise=0.03)
-        st = RefinementState((_silicon_phase(5.431),), (h,),  # deliberately off-true seed
-                             tuple(_base_params("h0", a=5.431)))
+        st = RefinementState(
+            (_silicon_phase(5.431),),
+            (h,),  # deliberately off-true seed
+            tuple(_base_params("h0", a=5.431)),
+        )
         res = engine.refine(st, engine, engine, max_iter=100)
         p_a = next(p for p in res.state.parameters if p.name == "phase:Si:cell.a")
         assert p_a.sigma is not None and p_a.sigma > 0
         n_sigma = abs(p_a.value - a_true) / p_a.sigma
-        assert n_sigma < ACCEPTANCE["recovery_n_sigma"], \
-            f"Recovered a={p_a.value:.5f} is {n_sigma:.1f} sigma from truth {a_true}"
+        assert (
+            n_sigma < ACCEPTANCE["recovery_n_sigma"]
+        ), f"Recovered a={p_a.value:.5f} is {n_sigma:.1f} sigma from truth {a_true}"
 
     def test_goodness_of_fit_calibration(self, engine):
         """For a correct model with correctly weighted noise, reduced chi^2 ~ 1."""
         h = _make_histogram("h0", A0, {"T": 300.0}, noise=1.0)
-        st = RefinementState((_silicon_phase(A0),), (h,), tuple(_base_params("h0", a=A0)))
+        st = RefinementState(
+            (_silicon_phase(A0),), (h,), tuple(_base_params("h0", a=A0))
+        )
         res = engine.refine(st, engine, engine, max_iter=100)
-        assert ACCEPTANCE["gof_low"] < res.reduced_chi2 < ACCEPTANCE["gof_high"], \
-            f"GoF {res.reduced_chi2:.3f} outside calibrated band"
+        assert (
+            ACCEPTANCE["gof_low"] < res.reduced_chi2 < ACCEPTANCE["gof_high"]
+        ), f"GoF {res.reduced_chi2:.3f} outside calibrated band"
 
     def test_rwp_monotone_nonincreasing_vs_seed(self, engine):
         """Refinement never makes the fit worse than the starting point."""
         h = _make_histogram("h0", 5.46, {"T": 300.0}, noise=0.05)
-        seed = RefinementState((_silicon_phase(5.431),), (h,), tuple(_base_params("h0", a=5.431)))
+        seed = RefinementState(
+            (_silicon_phase(5.431),), (h,), tuple(_base_params("h0", a=5.431))
+        )
         yc0 = engine.calculate(seed, h)
         rwp0 = spec.rwp(h.y_obs, yc0, h.weights)
         res = engine.refine(seed, engine, engine, max_iter=100)
@@ -258,16 +361,21 @@ class TestRefinementCorrectness:
 # D. Parametric-engine equivalence & stability (the core contribution)
 # =============================================================================
 
+
 def _identity_model(target: str, coeff: str) -> ParametricModel:
     """Degenerate model: target value == a single free coefficient (per-histogram)."""
-    return ParametricModel(target=target, coeff_names=(coeff,),
-                           func=lambda c, d: c[coeff])
+    return ParametricModel(
+        target=target, coeff_names=(coeff,), func=lambda c, d: c[coeff]
+    )
 
 
 def _linear_T_model(target: str, a0: str, alpha: str) -> ParametricModel:
     """Physically-motivated model: a(T) = a0 + alpha * T (linear thermal expansion)."""
-    return ParametricModel(target=target, coeff_names=(a0, alpha),
-                           func=lambda c, d: c[a0] + c[alpha] * d["T"])
+    return ParametricModel(
+        target=target,
+        coeff_names=(a0, alpha),
+        func=lambda c, d: c[a0] + c[alpha] * d["T"],
+    )
 
 
 class TestParametricEngine:
@@ -279,17 +387,21 @@ class TestParametricEngine:
         """
         temps = [300.0, 350.0, 400.0]
         a_trues = [5.431, 5.436, 5.441]
-        hists = [_make_histogram(f"h{i}", a, {"T": T}, noise=0.02)
-                 for i, (T, a) in enumerate(zip(temps, a_trues))]
+        hists = [
+            _make_histogram(f"h{i}", a, {"T": T}, noise=0.02)
+            for i, (T, a) in enumerate(zip(temps, a_trues))
+        ]
 
         # (1) Independent: refine each histogram on its own.
         indep_a = []
         for h in hists:
-            st = RefinementState((_silicon_phase(5.431),), (h,),
-                                 tuple(_base_params(h.id, a=5.431)))
+            st = RefinementState(
+                (_silicon_phase(5.431),), (h,), tuple(_base_params(h.id, a=5.431))
+            )
             r = engine.refine(st, engine, engine, max_iter=100)
-            indep_a.append(next(p.value for p in r.state.parameters
-                                if p.name == "phase:Si:cell.a"))
+            indep_a.append(
+                next(p.value for p in r.state.parameters if p.name == "phase:Si:cell.a")
+            )
 
         # (2) Degenerate-parametric: one ensemble refinement, identity model per hist.
         #     Each histogram gets its own 'a' coefficient => mathematically identical.
@@ -298,37 +410,68 @@ class TestParametricEngine:
             # turn cell.a into a per-histogram parametric coefficient
             params = [p for p in params if p.name != "phase:Si:cell.a"]
             coeff = f"param:a_{h.id}"
-            params.append(Parameter(coeff, ParamKind.PARAMETRIC, 5.431, vary=True,
-                                    lower=5.0, upper=6.0))
-            params.append(Parameter("phase:Si:cell.a", ParamKind.PHASE, 5.431, vary=False))
-            st = RefinementState((_silicon_phase(5.431),), (h,), tuple(params),
-                                 parametric_models=(_identity_model("phase:Si:cell.a", coeff),))
+            params.append(
+                Parameter(
+                    coeff, ParamKind.PARAMETRIC, 5.431, vary=True, lower=5.0, upper=6.0
+                )
+            )
+            params.append(
+                Parameter("phase:Si:cell.a", ParamKind.PHASE, 5.431, vary=False)
+            )
+            st = RefinementState(
+                (_silicon_phase(5.431),),
+                (h,),
+                tuple(params),
+                parametric_models=(_identity_model("phase:Si:cell.a", coeff),),
+            )
             r = engine.refine(st, engine, engine, max_iter=100)
             a_param = next(p.value for p in r.state.parameters if p.name == coeff)
-            assert math.isclose(a_param, a_indep, rel_tol=ACCEPTANCE["parametric_equiv_rtol"]), \
-                f"Parametric {a_param} != independent {a_indep}"
+            assert math.isclose(
+                a_param, a_indep, rel_tol=ACCEPTANCE["parametric_equiv_rtol"]
+            ), f"Parametric {a_param} != independent {a_indep}"
 
     def test_parametric_constrains_and_reduces_scatter(self, engine):
         """A physical a(T) model fit across the ensemble yields coefficients consistent
         with the ground-truth law — the Stinton–Evans precision benefit.
         """
-        alpha_true = 1.0e-4   # Angstrom / K
+        alpha_true = 1.0e-4  # Angstrom / K
         a0_true = 5.431
         temps = np.linspace(300, 600, 7)
-        hists = [_make_histogram(f"h{i}", a0_true + alpha_true * T, {"T": float(T)}, noise=0.03)
-                 for i, T in enumerate(temps)]
+        hists = [
+            _make_histogram(
+                f"h{i}", a0_true + alpha_true * T, {"T": float(T)}, noise=0.03
+            )
+            for i, T in enumerate(temps)
+        ]
 
         params: list[Parameter] = []
         for h in hists:
             params += [p for p in _base_params(h.id) if not p.name.startswith("phase:")]
-        params.append(Parameter("param:a0", ParamKind.PARAMETRIC, 5.40, vary=True, lower=5.0, upper=6.0))
-        params.append(Parameter("param:alpha", ParamKind.PARAMETRIC, 0.0, vary=True,
-                                lower=-1e-2, upper=1e-2))
+        params.append(
+            Parameter(
+                "param:a0", ParamKind.PARAMETRIC, 5.40, vary=True, lower=5.0, upper=6.0
+            )
+        )
+        params.append(
+            Parameter(
+                "param:alpha",
+                ParamKind.PARAMETRIC,
+                0.0,
+                vary=True,
+                lower=-1e-2,
+                upper=1e-2,
+            )
+        )
         params.append(Parameter("phase:Si:cell.a", ParamKind.PHASE, 5.431, vary=False))
 
-        st = RefinementState((_silicon_phase(),), tuple(hists), tuple(params),
-                             parametric_models=(_linear_T_model("phase:Si:cell.a",
-                                                                "param:a0", "param:alpha"),))
+        st = RefinementState(
+            (_silicon_phase(),),
+            tuple(hists),
+            tuple(params),
+            parametric_models=(
+                _linear_T_model("phase:Si:cell.a", "param:a0", "param:alpha"),
+            ),
+        )
         res = engine.refine(st, engine, engine, max_iter=200)
         a0 = next(p for p in res.state.parameters if p.name == "param:a0")
         al = next(p for p in res.state.parameters if p.name == "param:alpha")
@@ -338,7 +481,9 @@ class TestParametricEngine:
     def test_refinement_is_deterministic(self, engine):
         """Same inputs -> same outputs (reproducibility; no RNG leakage into the engine)."""
         h = _make_histogram("h0", 5.45, {"T": 300.0}, noise=0.0)
-        st = RefinementState((_silicon_phase(5.431),), (h,), tuple(_base_params("h0", a=5.431)))
+        st = RefinementState(
+            (_silicon_phase(5.431),), (h,), tuple(_base_params("h0", a=5.431))
+        )
         r1 = engine.refine(st, engine, engine, max_iter=50)
         r2 = engine.refine(st, engine, engine, max_iter=50)
         a1 = next(p.value for p in r1.state.parameters if p.name == "phase:Si:cell.a")
@@ -350,6 +495,7 @@ class TestParametricEngine:
 # E. Conservation laws & numerical guards
 # =============================================================================
 
+
 class TestConservationAndGuards:
 
     def test_phase_fraction_closure(self):
@@ -360,12 +506,16 @@ class TestConservationAndGuards:
         zmv = np.array([1.0, 1.0, 1.0])  # Z*M*V per phase (equal here)
         w = scales * zmv
         fractions = w / w.sum()
-        assert math.isclose(fractions.sum(), 1.0, abs_tol=ACCEPTANCE["phase_fraction_sum_atol"])
+        assert math.isclose(
+            fractions.sum(), 1.0, abs_tol=ACCEPTANCE["phase_fraction_sum_atol"]
+        )
 
     def test_refined_cell_stays_physical(self, engine):
         """No refinement step may produce a non-SPD metric tensor."""
         h = _make_histogram("h0", 5.45, {"T": 300.0}, noise=0.05)
-        st = RefinementState((_silicon_phase(5.431),), (h,), tuple(_base_params("h0", a=5.431)))
+        st = RefinementState(
+            (_silicon_phase(5.431),), (h,), tuple(_base_params("h0", a=5.431))
+        )
         res = engine.refine(st, engine, engine, max_iter=100)
         a = next(p.value for p in res.state.parameters if p.name == "phase:Si:cell.a")
         assert UnitCell(a, a, a).is_physical()
@@ -375,7 +525,9 @@ class TestConservationAndGuards:
         (the ADP/scale-correlation and over-parameterization failure modes).
         """
         h = _make_histogram("h0", A0, {"T": 300.0}, noise=0.05)
-        st = RefinementState((_silicon_phase(A0),), (h,), tuple(_base_params("h0", a=A0)))
+        st = RefinementState(
+            (_silicon_phase(A0),), (h,), tuple(_base_params("h0", a=A0))
+        )
         res = engine.refine(st, engine, engine, max_iter=50)
         assert "condition_number" in res.diagnostics
         assert math.isfinite(res.diagnostics["condition_number"])
@@ -384,10 +536,14 @@ class TestConservationAndGuards:
         """Zero-weight points must not influence the refinement (masking contract)."""
         h = _make_histogram("h0", A0, {"T": 300.0}, noise=0.0)
         # corrupt a region but zero its weights
-        y = h.y_obs.copy(); w = h.weights.copy()
-        y[100:150] = 1e6; w[100:150] = 0.0
+        y = h.y_obs.copy()
+        w = h.weights.copy()
+        y[100:150] = 1e6
+        w[100:150] = 0.0
         h2 = replace(h, y_obs=y, weights=w)
-        st = RefinementState((_silicon_phase(A0),), (h2,), tuple(_base_params("h0", a=A0)))
+        st = RefinementState(
+            (_silicon_phase(A0),), (h2,), tuple(_base_params("h0", a=A0))
+        )
         res = engine.refine(st, engine, engine, max_iter=50)
         a = next(p.value for p in res.state.parameters if p.name == "phase:Si:cell.a")
         assert abs(a - A0) < 1e-3, "Zero-weight corruption leaked into the fit."
@@ -397,6 +553,7 @@ class TestConservationAndGuards:
 # F. False-minimum / seed-quality discipline (WO3 lesson; PXRDGen lesson)
 # =============================================================================
 
+
 class TestSeedDiscipline:
 
     def test_better_rwp_is_not_blindly_trusted(self, engine):
@@ -405,7 +562,9 @@ class TestSeedDiscipline:
         by an over-good (chi^2 << 1) or physically implausible result, not Rwp alone.
         """
         h = _make_histogram("h0", A0, {"T": 300.0}, noise=1.0)
-        st = RefinementState((_silicon_phase(A0),), (h,), tuple(_base_params("h0", a=A0)))
+        st = RefinementState(
+            (_silicon_phase(A0),), (h,), tuple(_base_params("h0", a=A0))
+        )
         res = engine.refine(st, engine, engine, max_iter=100)
         # both metrics are present and a suspiciously low chi^2 would be catchable
         assert res.rwp >= 0.0
@@ -420,8 +579,10 @@ class TestSeedDiscipline:
         h = _make_histogram("h0", A0, {"T": 300.0}, noise=0.02)
         bad = _base_params("h0", a=5.431)
         # pin the cell far away and don't let it vary: a deliberately bad fixed model
-        bad = [replace(p, value=5.9, vary=False) if p.name == "phase:Si:cell.a" else p
-               for p in bad]
+        bad = [
+            replace(p, value=5.9, vary=False) if p.name == "phase:Si:cell.a" else p
+            for p in bad
+        ]
         st = RefinementState((_silicon_phase(5.9),), (h,), tuple(bad))
         res = engine.refine(st, engine, engine, max_iter=100)
         assert res.rwp > 0.05, "A grossly wrong fixed model must yield a poor Rwp."
@@ -430,6 +591,7 @@ class TestSeedDiscipline:
 # =============================================================================
 # G. State, provenance, serialization
 # =============================================================================
+
 
 class TestStateContract:
 
@@ -440,7 +602,9 @@ class TestStateContract:
 
     def test_refinement_records_provenance(self, engine):
         h = _make_histogram("h0", A0, {"T": 300.0}, noise=0.0)
-        st = RefinementState((_silicon_phase(A0),), (h,), tuple(_base_params("h0", a=A0)))
+        st = RefinementState(
+            (_silicon_phase(A0),), (h,), tuple(_base_params("h0", a=A0))
+        )
         res = engine.refine(st, engine, engine, max_iter=20)
         assert any("refined" in m for m in res.state.provenance)
 
@@ -453,9 +617,13 @@ class TestStateContract:
 # H. AI-layer guardrails (propose-only contract)
 # =============================================================================
 
+
 class _DummyIdentifier:
     """A stand-in PhaseIdentifier that returns ranked candidates only."""
-    def propose(self, histogram: Histogram, chemistry=None) -> Sequence[tuple[Phase, float]]:
+
+    def propose(
+        self, histogram: Histogram, chemistry=None
+    ) -> Sequence[tuple[Phase, float]]:
         return [(_silicon_phase(A0), 0.95), (_silicon_phase(5.658), 0.40)]
 
 
@@ -479,8 +647,9 @@ class TestAIGuardrails:
         ident = _DummyIdentifier()
         h = _make_histogram("h0", A0, {"T": 300.0}, noise=0.05)
         best_phase, _conf = ident.propose(h)[0]
-        st = RefinementState((best_phase,), (h,),
-                             tuple(_base_params("h0", a=best_phase.cell.a)))
+        st = RefinementState(
+            (best_phase,), (h,), tuple(_base_params("h0", a=best_phase.cell.a))
+        )
         res = engine.refine(st, engine, engine, max_iter=100)
         # the acceptance signal is an ENGINE output, never the AI confidence
         assert isinstance(res, RefinementResult)
@@ -491,6 +660,7 @@ class TestAIGuardrails:
 # Protocol conformance: the production engine must satisfy the Protocols.
 # =============================================================================
 
+
 def test_reference_engine_conforms_to_protocols():
     eng = RefEngine()
     assert isinstance(eng, spec.ForwardModel)
@@ -500,4 +670,5 @@ def test_reference_engine_conforms_to_protocols():
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(pytest.main([__file__, "-v"]))

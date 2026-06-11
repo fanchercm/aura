@@ -79,3 +79,58 @@ The executable specification is now the authoritative core; the old mutable
   the Phase 6 AD backend cuts their cost. The reference `Minimizer` uses
   finite-difference Gauss–Newton that runs to `max_iter` — this is the
   fragility/cost that motivates Phase 6.
+
+### 2026-06-11: Phase 1 — native importer registry + readers + bridge
+
+A native, pluggable importer registry (`src/aura/io/`) modeled on GSAS-II's
+reader-class design, **with no GSAS-II dependency** (decision: native
+reimplementation, all four importer domains). The old mutable `parameters.py`
+is deleted; the spec model is now the only parameter model.
+
+- **Registry** (`io/registry.py`): a `@runtime_checkable Reader` Protocol
+  (`name`, `domain`, `extensions`, `contents_validator`, `read`) + a
+  `ReaderRegistry` that selects by **content sniffing**, not just extension
+  (so the shared `.gsa` extension routes to the TOF column reader vs CONST
+  reader correctly, and `.cif` resolves powder-vs-phase). `aura.readers`
+  entry-point hook seeds the Phase-11 plugin SDK. Long-tail formats are
+  registered as explicit `NotImplementedError` stubs so coverage gaps are
+  testable, not silent.
+- **gemmi** added as a dependency (`>=0.6.0`) for CIF parsing (pip-installable
+  here; network worked despite the pixi/PyPI note). `CIFReader` handles
+  GSAS-II-flavored CIFs (`_space_group_name_H-M_alt` + symop loop, esd notation
+  `5.9738(7)`); NaBr/Pb/NAC all parse to physical cells.
+
+**Hard-won GSAS format decodings** (verified empirically against the data —
+record so we never re-derive them):
+- **GSAS CONST raw** (`.XRA`, `.CWN`): points are packed `(I2,I6)` per 8-char
+  field. `I2` = **number of detectors contributing** to that point, `I6` =
+  **summed counts**. So `y = counts/ndet`, `esd = sqrt(counts)/ndet`. The D1A
+  CWN data has `I2` varying 1→10 (detector overlap across the 2θ scan); lab XRA
+  has `I2` blank ⇒ ndet=1. Abscissa from the BANK record's `CONST <start>
+  <step>` in **centidegrees** (÷100 → 2θ°). The title line's start/step/end is
+  human-readable only and can disagree (FAP title says end 90° but
+  nchan×step ⇒ 130°; the BANK record is authoritative).
+- **FXYE** (11-BM): free-format `X Y E` with **X in centidegrees** (÷100). The
+  54000-step header is nominal; read all rows (≈59.5k here), step ≈0.001°.
+- **TOF `.gsa`** (SNAP): SLOG banks, handled by the original `load_gsa_file`
+  (wrapped as `GSASColumnReader`); distinguished from CONST by `SLOG`/`DIFC`.
+- **Old `.prm`** (D1A): strict fixed columns — `INS`(1-3), blank(4), bank(5-6),
+  key(7+). `ICONS[0]` = CW wavelength (1.909 Å); `HTYPE PNCR` ⇒ CW neutron.
+  Getting the column offsets wrong silently misparses the key as the bank digit.
+- **Note**: any uniform error in the CONST `ndet` interpretation would be a pure
+  scale factor (peak *positions* — the physics — are unaffected), so the
+  refinement scale absorbs it; cross-check the absolute intensity scale against
+  GSAS-II at the Phase-11 reference gate.
+
+- **Bridge** (`bridge.py`): one-way `Campaign/MeasurementState → tuple[Histogram]`.
+  Drops invalid points via `valid_mask` (SNAP bank1 3386→3369, leading NaNs),
+  weights `1/clip(σ²,1,∞)` (Poisson), routes data-type fields
+  (wavelength/difc/two_theta_fixed), derives `driving` from state metadata
+  (run_number as the SNAP stimulus proxy). Raises clearly if a CW slice lacks a
+  wavelength (supply via `apply_instprm` or `wavelength=`).
+- **Coverage now**: TOF (SNAP) ✓, CW neutron (PbSO₄/D1A) ✓, CW X-ray
+  (PbSO₄/FAP/NAC) ✓ — three of four `DataType`s on real data. EDD + 2D images +
+  single-crystal remain (Phase 10).
+- **Tests**: 69 unit tests pass (was 92; the ~50-test `test_parameters.py` for
+  the retired mutable layer was replaced by leaner `test_parameters_spec.py` +
+  the new `test_io.py`). ruff + black clean across `src/`+`tests/`.

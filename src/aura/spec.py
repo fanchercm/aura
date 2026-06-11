@@ -42,14 +42,11 @@ these to tolerance.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import (
-    Callable,
-    Mapping,
-    Optional,
     Protocol,
-    Sequence,
     runtime_checkable,
 )
 
@@ -63,18 +60,21 @@ Array = NDArray[np.float64]
 # 1. Data-type / experiment taxonomy
 # =============================================================================
 
+
 class DataType(str, Enum):
     """Diffraction data type. Determines the abscissa and the position model."""
-    CW_XRAY = "cw_xray"        # constant-wavelength X-ray; abscissa = 2theta (deg)
+
+    CW_XRAY = "cw_xray"  # constant-wavelength X-ray; abscissa = 2theta (deg)
     CW_NEUTRON = "cw_neutron"  # constant-wavelength neutron; abscissa = 2theta (deg)
-    TOF = "tof"                # time-of-flight neutron; abscissa = TOF (microseconds)
-    EDD = "edd"                # energy-dispersive X-ray; abscissa = energy (keV), fixed 2theta
+    TOF = "tof"  # time-of-flight neutron; abscissa = TOF (microseconds)
+    EDD = "edd"  # energy-dispersive X-ray; abscissa = energy (keV), fixed 2theta
 
 
 class ParamKind(str, Enum):
     """Taxonomy of refinable parameters (the four classes the engine must track)."""
-    PHASE = "phase"            # one set per phase: cell, fractional xyz, occ, ADP
-    HISTOGRAM = "histogram"    # one set per histogram: scale, background, instrument profile, displacement
+
+    PHASE = "phase"  # one set per phase: cell, fractional xyz, occ, ADP
+    HISTOGRAM = "histogram"  # one set per histogram: scale, background, instrument profile, displacement
     PHASE_DATA = "phase_data"  # per (phase, histogram): phase fraction, size, microstrain, texture
     PARAMETRIC = "parametric"  # coefficients of a p(v) model that drives any of the above across the ensemble
 
@@ -84,27 +84,33 @@ class ParamKind(str, Enum):
 #    A production engine reimplements these on GPU/autodiff and must AGREE.
 # =============================================================================
 
-def metric_tensor(a: float, b: float, c: float,
-                  alpha_deg: float, beta_deg: float, gamma_deg: float) -> Array:
+
+def metric_tensor(
+    a: float, b: float, c: float, alpha_deg: float, beta_deg: float, gamma_deg: float
+) -> Array:
     """Real-space metric tensor G. d^2 between fractional vectors uses G.
 
     G is symmetric positive-definite for any physically valid cell.
     """
     al, be, ga = map(math.radians, (alpha_deg, beta_deg, gamma_deg))
-    return np.array([
-        [a * a,                 a * b * math.cos(ga), a * c * math.cos(be)],
-        [a * b * math.cos(ga),  b * b,                b * c * math.cos(al)],
-        [a * c * math.cos(be),  b * c * math.cos(al), c * c],
-    ], dtype=np.float64)
+    return np.array(
+        [
+            [a * a, a * b * math.cos(ga), a * c * math.cos(be)],
+            [a * b * math.cos(ga), b * b, b * c * math.cos(al)],
+            [a * c * math.cos(be), b * c * math.cos(al), c * c],
+        ],
+        dtype=np.float64,
+    )
 
 
-def reciprocal_metric_tensor(a: float, b: float, c: float,
-                             alpha_deg: float, beta_deg: float, gamma_deg: float) -> Array:
+def reciprocal_metric_tensor(
+    a: float, b: float, c: float, alpha_deg: float, beta_deg: float, gamma_deg: float
+) -> Array:
     """Reciprocal metric tensor G* = inv(G). d*^2(hkl) = h^T G* h."""
     return np.linalg.inv(metric_tensor(a, b, c, alpha_deg, beta_deg, gamma_deg))
 
 
-def d_spacing(hkl: Sequence[int], cell: "UnitCell") -> float:
+def d_spacing(hkl: Sequence[int], cell: UnitCell) -> float:
     """Interplanar spacing d for a reflection, from the reciprocal metric tensor."""
     h = np.asarray(hkl, dtype=np.float64)
     gstar = reciprocal_metric_tensor(*cell.as_tuple())
@@ -137,10 +143,12 @@ def energy_from_d(d: float, two_theta_deg: float) -> float:
     return HC / (2.0 * d * math.sin(theta))
 
 
-def structure_factor(hkl: Sequence[int],
-                     atoms: "Sequence[AtomSite]",
-                     cell: "UnitCell",
-                     scattering: "Mapping[str, float]") -> complex:
+def structure_factor(
+    hkl: Sequence[int],
+    atoms: Sequence[AtomSite],
+    cell: UnitCell,
+    scattering: Mapping[str, float],
+) -> complex:
     """Structure factor F(hkl) with isotropic ADP (reference, scalar form factors).
 
     F = sum_j occ_j * f_j * exp(2 pi i (h x + k y + l z)) * exp(-B_j (sin th/lambda)^2)
@@ -182,11 +190,13 @@ def weighted_residual(y_obs: Array, y_calc: Array, weights: Array) -> Array:
 def rwp(y_obs: Array, y_calc: Array, weights: Array) -> float:
     """Weighted profile R-factor (fraction, not percent)."""
     num = float(np.sum(weights * (y_obs - y_calc) ** 2))
-    den = float(np.sum(weights * y_obs ** 2))
+    den = float(np.sum(weights * y_obs**2))
     return math.sqrt(num / den)
 
 
-def reduced_chi_square(y_obs: Array, y_calc: Array, weights: Array, n_params: int) -> float:
+def reduced_chi_square(
+    y_obs: Array, y_calc: Array, weights: Array, n_params: int
+) -> float:
     """Goodness of fit chi^2 / (N_obs - N_params). ~1 for a correct model + correct noise."""
     chi2 = float(np.sum(weights * (y_obs - y_calc) ** 2))
     dof = len(y_obs) - n_params
@@ -198,6 +208,7 @@ def reduced_chi_square(y_obs: Array, y_calc: Array, weights: Array, n_params: in
 # =============================================================================
 # 3. Immutable state model
 # =============================================================================
+
 
 @dataclass(frozen=True)
 class UnitCell:
@@ -235,7 +246,7 @@ class AtomSite:
 @dataclass(frozen=True)
 class Phase:
     name: str
-    space_group: str          # Hermann–Mauguin; resolved via cctbx in production
+    space_group: str  # Hermann–Mauguin; resolved via cctbx in production
     cell: UnitCell
     atoms: tuple[AtomSite, ...]
 
@@ -243,22 +254,26 @@ class Phase:
 @dataclass(frozen=True)
 class Histogram:
     """One measured pattern plus its driving-variable coordinate(s)."""
+
     id: str
     data_type: DataType
-    x: Array                  # abscissa (2theta deg | TOF us | energy keV)
+    x: Array  # abscissa (2theta deg | TOF us | energy keV)
     y_obs: Array
-    weights: Array            # typically 1/sigma^2
+    weights: Array  # typically 1/sigma^2
     driving: Mapping[str, float]  # e.g. {"T": 300.0} or {"t": 12.0, "P": 1.0}
-    wavelength: Optional[float] = None        # CW only
-    two_theta_fixed: Optional[float] = None   # EDD only
-    difc: Optional[float] = None              # TOF only
+    wavelength: float | None = None  # CW only
+    two_theta_fixed: float | None = None  # EDD only
+    difc: float | None = None  # TOF only
     difa: float = 0.0
     zero: float = 0.0
 
     def __post_init__(self) -> None:
         if not (len(self.x) == len(self.y_obs) == len(self.weights)):
             raise ValueError("x, y_obs, weights length mismatch.")
-        if self.data_type in (DataType.CW_XRAY, DataType.CW_NEUTRON) and self.wavelength is None:
+        if (
+            self.data_type in (DataType.CW_XRAY, DataType.CW_NEUTRON)
+            and self.wavelength is None
+        ):
             raise ValueError("CW data requires a wavelength.")
         if self.data_type is DataType.TOF and self.difc is None:
             raise ValueError("TOF data requires DIFC.")
@@ -269,13 +284,14 @@ class Histogram:
 @dataclass(frozen=True)
 class Parameter:
     """A single scalar handle the minimizer may vary."""
-    name: str                 # unique, e.g. "phase:alumina:cell.a" or "param:therm.alpha"
+
+    name: str  # unique, e.g. "phase:alumina:cell.a" or "param:therm.alpha"
     kind: ParamKind
     value: float
     vary: bool = False
     lower: float = -math.inf
     upper: float = math.inf
-    sigma: Optional[float] = None   # populated post-refinement
+    sigma: float | None = None  # populated post-refinement
 
 
 @dataclass(frozen=True)
@@ -286,7 +302,8 @@ class ParametricModel:
     histogram, identity map) reproduces independent/sequential refinement and is
     what the equivalence invariant tests against.
     """
-    target: str               # which parameter this model drives, e.g. "phase:Si:cell.a"
+
+    target: str  # which parameter this model drives, e.g. "phase:Si:cell.a"
     coeff_names: tuple[str, ...]
     func: Callable[[Mapping[str, float], Mapping[str, float]], float]
 
@@ -294,14 +311,15 @@ class ParametricModel:
 @dataclass(frozen=True)
 class RefinementState:
     """The complete, serializable description of a refinement problem."""
+
     phases: tuple[Phase, ...]
     histograms: tuple[Histogram, ...]
     parameters: tuple[Parameter, ...]
     parametric_models: tuple[ParametricModel, ...] = ()
-    constraints: tuple[str, ...] = ()    # e.g. "sum(phase_fraction) == 1"
-    provenance: tuple[str, ...] = ()     # ordered log of operations applied
+    constraints: tuple[str, ...] = ()  # e.g. "sum(phase_fraction) == 1"
+    provenance: tuple[str, ...] = ()  # ordered log of operations applied
 
-    def with_log(self, msg: str) -> "RefinementState":
+    def with_log(self, msg: str) -> RefinementState:
         return replace(self, provenance=self.provenance + (msg,))
 
     @property
@@ -311,19 +329,20 @@ class RefinementState:
 
 @dataclass(frozen=True)
 class RefinementResult:
-    state: RefinementState                 # updated parameters (with sigmas)
+    state: RefinementState  # updated parameters (with sigmas)
     rwp: float
     reduced_chi2: float
     converged: bool
     n_iterations: int
-    covariance: Optional[Array] = None     # parameter covariance matrix
+    covariance: Array | None = None  # parameter covariance matrix
     diagnostics: Mapping[str, float] = field(default_factory=dict)
-    seed_quality_ok: bool = True           # False => seed too poor to refine (PXRDGen lesson)
+    seed_quality_ok: bool = True  # False => seed too poor to refine (PXRDGen lesson)
 
 
 # =============================================================================
 # 4. Behavioral Protocols (the contracts the agent implements)
 # =============================================================================
+
 
 @runtime_checkable
 class ForwardModel(Protocol):
@@ -370,13 +389,14 @@ class Minimizer(Protocol):
     (the parametric/surface objective), using AD Jacobians on GPU in production.
     """
 
-    def refine(self,
-               state: RefinementState,
-               forward: ForwardModel,
-               parametric: ParametricEngine,
-               max_iter: int = 100,
-               tol: float = 1e-8) -> RefinementResult:
-        ...
+    def refine(
+        self,
+        state: RefinementState,
+        forward: ForwardModel,
+        parametric: ParametricEngine,
+        max_iter: int = 100,
+        tol: float = 1e-8,
+    ) -> RefinementResult: ...
 
 
 @runtime_checkable
@@ -389,8 +409,9 @@ class DomainModule(Protocol):
 
     name: str
 
-    def contribute(self, state: RefinementState, histogram: Histogram,
-                   y_calc: Array) -> Array:
+    def contribute(
+        self, state: RefinementState, histogram: Histogram, y_calc: Array
+    ) -> Array:
         """Return the modified y_calc."""
         ...
 
@@ -399,8 +420,9 @@ class DomainModule(Protocol):
 class PhaseIdentifier(Protocol):
     """AI triage service. PROPOSES candidates only; never returns final parameters."""
 
-    def propose(self, histogram: Histogram, chemistry: Optional[Sequence[str]] = None
-                ) -> Sequence[tuple[Phase, float]]:
+    def propose(
+        self, histogram: Histogram, chemistry: Sequence[str] | None = None
+    ) -> Sequence[tuple[Phase, float]]:
         """Return ranked (candidate phase, confidence) pairs for engine validation."""
         ...
 
@@ -411,15 +433,16 @@ class PhaseIdentifier(Protocol):
 # =============================================================================
 
 ACCEPTANCE = {
-    "jacobian_rtol": 1e-4,          # AD vs finite-difference Jacobian agreement
-    "fixpoint_step_atol": 1e-6,     # refine-from-truth must not move (noise-free)
-    "recovery_n_sigma": 3.0,        # synthetic recovery within 3 sigma of truth
-    "gof_low": 0.8, "gof_high": 1.5,  # reduced chi^2 band for correct model+noise
+    "jacobian_rtol": 1e-4,  # AD vs finite-difference Jacobian agreement
+    "fixpoint_step_atol": 1e-6,  # refine-from-truth must not move (noise-free)
+    "recovery_n_sigma": 3.0,  # synthetic recovery within 3 sigma of truth
+    "gof_low": 0.8,
+    "gof_high": 1.5,  # reduced chi^2 band for correct model+noise
     "phase_fraction_sum_atol": 1e-6,
-    "metric_min_eig": 1e-9,         # metric tensor positive-definite guard
+    "metric_min_eig": 1e-9,  # metric tensor positive-definite guard
     "parametric_equiv_rtol": 1e-5,  # degenerate-parametric == independent refinement
     "cw_tof_edd_position_rtol": 1e-9,  # position-model round-trip accuracy
-    "seed_rmse_refinable_max": 0.3,    # PXRDGen: refine should flag seeds worse than this
+    "seed_rmse_refinable_max": 0.3,  # PXRDGen: refine should flag seeds worse than this
 }
 
 
@@ -427,9 +450,10 @@ ACCEPTANCE = {
 # 6. Self-consistency check (makes this file "executable")
 # =============================================================================
 
+
 def _self_check() -> None:
     # 6a. Metric tensor is SPD for a physical cell, rejected for an impossible one.
-    good = UnitCell(4.05, 4.05, 4.05)                      # cubic Al-like
+    good = UnitCell(4.05, 4.05, 4.05)  # cubic Al-like
     assert good.is_physical()
     bad = UnitCell(1.0, 1.0, 1.0, alpha=170, beta=170, gamma=170)  # non-SPD metric
     assert not bad.is_physical(), "Impossible cell must be rejected by metric SPD test."
@@ -472,8 +496,9 @@ def _self_check() -> None:
     assert 0.8 < gof < 1.2, f"GoF {gof} outside expected band for correct model+noise."
 
     # 6f. State model: immutability and provenance logging.
-    state = RefinementState(phases=(Phase("Si", "Fd-3m", cell, tuple(si)),),
-                            histograms=(), parameters=())
+    state = RefinementState(
+        phases=(Phase("Si", "Fd-3m", cell, tuple(si)),), histograms=(), parameters=()
+    )
     logged = state.with_log("created")
     assert logged.provenance == ("created",)
     assert state.provenance == (), "Original state must be unchanged (immutable)."
