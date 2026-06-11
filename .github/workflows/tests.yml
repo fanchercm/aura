@@ -13,8 +13,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        # requires-python is >=3.11; macOS gets a single smoke leg (3.12).
+        os: [ubuntu-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+        include:
+          - os: macos-latest
+            python-version: "3.12"
 
     steps:
     - name: Checkout code
@@ -31,9 +35,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
 
+    - name: Spec self-check (executable specification)
+      run: python -m aura.spec
+
     - name: Run tests with pytest
       run: |
-        pytest --cov=src/package_name --cov-report=xml --cov-report=term-missing
+        pytest --cov=src/aura --cov-report=xml --cov-report=term-missing
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

@@ -8,7 +8,7 @@ import pytest
 from aura.loaders import load_campaign_from_directory, load_gsa_file, load_instprm
 
 # Path to the real test data shipped with the repo
-DATA_DIR = Path(__file__).parent / "testDataGsas"
+DATA_DIR = Path(__file__).parent.parent / "testDataGsas"
 SAMPLE_GSA = DATA_DIR / "SNAP067702_column.gsa"
 INSTPRM = DATA_DIR / "SNAP066787_column.instprm"
 
@@ -115,6 +115,7 @@ class TestLoadInstprm:
 # load_campaign_from_directory
 # ---------------------------------------------------------------------------
 
+@pytest.mark.integration
 class TestLoadCampaign:
     def test_loads_all_runs(self):
         campaign = load_campaign_from_directory(DATA_DIR)

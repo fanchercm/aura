@@ -40,3 +40,42 @@ This file captures key findings, decisions, and verified facts discovered during
 - **Design decisions**: (1) Parameter trajectory/history stored *externally* in refinement engine, not on Parameter — keeps the class lightweight and serializable. Parameter only stores `initial_value` for reset. (2) Crystallographic constraints (bond-length, symmetry-aware) deferred — require space-group machinery (gemmi/diffpy). Phase 1 constraints: equality ties, linear ties, callable ties. (3) `param_id` is an opaque unique key — scope qualifiers encoded by convention (e.g. `"NaBr:a"`, `"SNAP067702:bank1:bkg_c0"`) but not parsed.
 - **Realistic SNAP test**: 436 parameters (2 lattice + 36 profile + 18 calibration + 38 state-scales + 342 backgrounds), 382 free, profile/calibration fixed by default. Constraint reduces independent count correctly.
 - 92 tests passing, 97% overall coverage. `parameters.py` at 100%.
+
+### 2026-06-11: Phase 0 (next-gen rebuild) — oracle adopted as package core
+
+Start of the next-generation rebuild per the approved plan
+([using-the-requirments-planning-humble-parasol.md](../../.claude/plans/using-the-requirments-planning-humble-parasol.md)).
+The executable specification is now the authoritative core; the old mutable
+`parameters.py` layer is slated for deletion in Phase 1.
+
+- **`docs/spec.py` → `src/aura/spec.py`**: the canonical core (numpy oracle
+  kernels, immutable `RefinementState`/`Phase`/`Histogram`/`Parameter`,
+  `@runtime_checkable` Protocols `ForwardModel`/`ParametricEngine`/`Minimizer`/
+  `DomainModule`/`PhaseIdentifier`, and the `ACCEPTANCE` tolerance dict).
+  `python -m aura.spec` runs the self-consistency check (PASS).
+- **`RefEngine` → `src/aura/reference.py`**: the reference numpy engine
+  (single cubic phase, scale + flat bkg, pseudo-Voigt/reflection). It is the
+  *oracle* the physics suite runs green against today, and the reference a
+  production engine is checked against. Conforms to all three Protocols.
+- **Oracle suite → `tests/physics/test_invariants.py`**: imports rewritten to
+  `aura.spec`/`aura.reference`. The `engine` fixture moved to `tests/conftest.py`
+  — this is the **single swap point** to point the suite at a production engine
+  (will become `params=[RefEngine, ProductionEngine]` from Phase 3).
+- **Tier layout**: `tests/{unit,physics,campaign,reference,ai,performance}/`,
+  each with a `README.md` of intended invariants. Existing tests moved to
+  `tests/unit/` (data-dir paths fixed to `parent.parent`; the 19-run campaign
+  load marked `@pytest.mark.integration`). 92 unit tests pass.
+- **CI/config fixes**: `tests.yml` matrix `3.9/3.10` (violated
+  `requires-python>=3.11`) → `[3.11,3.12,3.13]` + a single macOS smoke leg;
+  stale `--cov=src/package_name` → `src/aura`; added a `python -m aura.spec`
+  step. `pyproject` mypy `python_version` `3.9`→`3.11`; added `physics` marker.
+- **Verified green**: 92 unit tests (4.9s) + 33 physics invariants (**943s ≈
+  15m43s**) all pass; `python -m aura.spec` PASS; `RefEngine` conforms to all
+  three Protocols.
+- **CI implication**: at ~16 min the *full* physics tier is too slow to block
+  every PR. The fast non-refining subset (crystallography, state, conformance,
+  forward purity, Jacobian, AI guardrails — 21 tests) runs in **0.64s** and is
+  the right per-PR gate; the slow FD-refinement invariants belong nightly until
+  the Phase 6 AD backend cuts their cost. The reference `Minimizer` uses
+  finite-difference Gauss–Newton that runs to `max_iter` — this is the
+  fragility/cost that motivates Phase 6.

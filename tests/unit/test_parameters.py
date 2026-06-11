@@ -20,7 +20,7 @@ GLOBAL = ParameterScope.GLOBAL
 STATE = ParameterScope.STATE
 SLICE = ParameterScope.SLICE
 
-DATA_DIR = Path(__file__).parent / "testDataGsas"
+DATA_DIR = Path(__file__).parent.parent / "testDataGsas"
 
 
 # ================================================================== #
