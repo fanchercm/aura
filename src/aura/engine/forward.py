@@ -221,7 +221,9 @@ class ProductionEngine:
     def jacobian(self, state: RefinementState, histogram: Histogram) -> np.ndarray:
         return self.forward.jacobian(state, histogram)
 
-    def expand(self, state: RefinementState, histogram: Histogram) -> RefinementState:  # noqa: ARG002
+    def expand(
+        self, state: RefinementState, histogram: Histogram
+    ) -> RefinementState:  # noqa: ARG002
         # Identity until the real parametric engine lands (Phase 5). Parametric
         # models, when present, are resolved here into per-histogram values.
         return state
