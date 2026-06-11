@@ -328,6 +328,30 @@ class RefinementState:
 
 
 @dataclass(frozen=True)
+class ProvenanceManifest:
+    """Immutable record making one refinement reproducible (oracle §13).
+
+    Every refinement must be traceable to the exact inputs, code, and
+    configuration that produced it. Missing required fields are a failure: a
+    result without provenance is not a trustworthy scientific result. Built by
+    :mod:`aura.provenance`; serialized via its ``to_yaml``/``from_yaml``.
+    """
+
+    input_data_hash: str  # sha256 over all histogram (x, y_obs, weights)
+    software_version: str  # aura.__version__
+    git_commit: str  # repo HEAD, or "unknown"
+    kernel_backend: str  # engine.name (e.g. "reference-numpy")
+    optimizer: Mapping[str, object]  # max_iter, tol, damping, method, ...
+    random_seed: int | None  # seed threaded into refine(), for determinism
+    parameter_graph_hash: str  # topology: (name, kind, vary, bounds) + models
+    phase_model_hash: str  # phases: cells + atom sites
+    instrument_model_hash: str  # per-histogram instrument terms
+    environment_lock: str  # sha256 of pixi.lock (or "unknown")
+    agent_patch_id: str | None = None  # AI patch identifier, if any
+    human_review_state: str | None = None  # e.g. "approved", "pending"
+
+
+@dataclass(frozen=True)
 class RefinementResult:
     state: RefinementState  # updated parameters (with sigmas)
     rwp: float
@@ -337,6 +361,7 @@ class RefinementResult:
     covariance: Array | None = None  # parameter covariance matrix
     diagnostics: Mapping[str, float] = field(default_factory=dict)
     seed_quality_ok: bool = True  # False => seed too poor to refine (PXRDGen lesson)
+    provenance: ProvenanceManifest | None = None  # populated at refine() time
 
 
 # =============================================================================
@@ -396,7 +421,13 @@ class Minimizer(Protocol):
         parametric: ParametricEngine,
         max_iter: int = 100,
         tol: float = 1e-8,
-    ) -> RefinementResult: ...
+        seed: int | None = None,
+    ) -> RefinementResult:
+        """Refine *state*. ``seed`` is recorded in the result's provenance so a
+        run is reproducible; an implementation that uses no randomness still
+        records it.
+        """
+        ...
 
 
 @runtime_checkable

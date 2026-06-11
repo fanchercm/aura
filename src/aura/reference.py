@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import functools
 import math
+import time
 from dataclasses import replace
 
 import numpy as np
@@ -32,6 +33,20 @@ from aura.spec import (
     RefinementState,
     UnitCell,
 )
+
+try:  # Unix only; used for a coarse peak-RSS profiling hook.
+    import resource
+except ImportError:  # pragma: no cover - Windows
+    resource = None
+
+
+def _peak_rss_mb() -> float:
+    """Coarse process peak RSS in MB (0.0 if unavailable)."""
+    if resource is None:
+        return 0.0
+    maxrss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    # Linux reports KiB, macOS reports bytes.
+    return maxrss / 1024.0 if maxrss < 1e9 else maxrss / (1024.0 * 1024.0)
 
 
 @functools.lru_cache(maxsize=256)
@@ -143,8 +158,10 @@ class RefEngine:
 
     # ---- Minimizer.refine (Gauss–Newton over the FULL ensemble) -------------
     def refine(
-        self, state, forward, parametric, max_iter=100, tol=1e-8
+        self, state, forward, parametric, max_iter=100, tol=1e-8, seed=None
     ) -> RefinementResult:
+        t0 = time.perf_counter()
+        n_forward = 0
         varied = self._varied(state)
         names = [p.name for p in varied]
         x = np.array([p.value for p in varied], dtype=float)
@@ -167,6 +184,7 @@ class RefEngine:
             res_blocks, jac_blocks, wsum = [], [], []
             for hist in state.histograms:
                 yc = forward.calculate(cur, hist)
+                n_forward += 1
                 r = spec.weighted_residual(hist.y_obs, yc, hist.weights)
                 Jh = forward.jacobian(cur, hist)
                 sw = np.sqrt(hist.weights)[:, None]
@@ -193,6 +211,7 @@ class RefEngine:
         yo = np.concatenate([h.y_obs for h in state.histograms])
         w = np.concatenate([h.weights for h in state.histograms])
         yc = np.concatenate([forward.calculate(cur, h) for h in state.histograms])
+        n_forward += len(state.histograms)
         gof = spec.reduced_chi_square(yo, yc, w, len(varied))
         try:
             cov = gof * np.linalg.inv(JTJ + lam * np.eye(JTJ.shape[0]))
@@ -208,6 +227,27 @@ class RefEngine:
         result_state = replace(cur, parameters=tuple(params)).with_log(
             f"refined: {len(varied)} params, {it} iters, converged={converged}"
         )
+
+        from aura import provenance
+
+        optimizer = {
+            "method": "gauss-newton-levenberg",
+            "max_iter": max_iter,
+            "tol": tol,
+        }
+        manifest = provenance.build_manifest(
+            state,
+            kernel_backend=self.name,
+            optimizer=optimizer,
+            random_seed=seed,
+        )
+        diagnostics = {
+            "condition_number": float(np.linalg.cond(JTJ)),
+            "wall_time_s": time.perf_counter() - t0,
+            "n_forward_evals": float(n_forward),
+            "peak_rss_mb": _peak_rss_mb(),
+            "n_points": float(sum(len(h.x) for h in state.histograms)),
+        }
         return RefinementResult(
             state=result_state,
             rwp=spec.rwp(yo, yc, w),
@@ -215,5 +255,6 @@ class RefEngine:
             converged=converged,
             n_iterations=it,
             covariance=cov,
-            diagnostics={"condition_number": float(np.linalg.cond(JTJ))},
+            diagnostics=diagnostics,
+            provenance=manifest,
         )

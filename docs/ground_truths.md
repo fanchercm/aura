@@ -133,4 +133,41 @@ record so we never re-derive them):
   single-crystal remain (Phase 10).
 - **Tests**: 69 unit tests pass (was 92; the ~50-test `test_parameters.py` for
   the retired mutable layer was replaced by leaner `test_parameters_spec.py` +
-  the new `test_io.py`). ruff + black clean across `src/`+`tests/`.
+  the new `test_io.py`). ruff + black clean across `src/`+`tests/`. Phase 1
+  full-suite confirmation: **102 passed** (69 unit + 33 physics) in 15m.
+
+### 2026-06-11: Phase 2 — provenance manifest (BLOCKING contract)
+
+Landed early, before the production engine, because it changes `RefinementResult`'s
+shape and `Minimizer.refine`'s signature — retrofitting later would touch every
+call site (oracle §13 makes provenance BLOCKING).
+
+- **`ProvenanceManifest`** (frozen dataclass in `spec.py`, kept pure — no I/O):
+  input_data_hash, software_version, git_commit, kernel_backend, optimizer,
+  random_seed, parameter_graph_hash, phase_model_hash, instrument_model_hash,
+  environment_lock, agent_patch_id, human_review_state. Added as an optional
+  `provenance` field on `RefinementResult`.
+- **`src/aura/provenance.py`** does the impure construction: `hash_inputs`
+  (sha256 over histogram x/y/weights bytes), `parameter_graph_hash` (sorted
+  name/kind/vary/bounds + model ties — **topology, not values**),
+  `phase_model_hash`, `instrument_model_hash`, `git_commit` (subprocess, walks
+  up for `.git`, "unknown" fallback), `environment_lock` (sha256 of `pixi.lock`),
+  `build_manifest`, `to_yaml`/`from_yaml`, `validate`. Placed in a separate
+  module to keep `spec.py` import-light and dependency-free (avoids a
+  spec→provenance cycle).
+- **`Minimizer.refine` gained `seed: int | None = None`** (recorded for
+  determinism; default keeps the physics suite's `refine(st, eng, eng, ...)`
+  calls working). `RefEngine.refine` now populates the manifest + profiling
+  diagnostics (PERF-6): `wall_time_s`, `n_forward_evals`, `peak_rss_mb`
+  (coarse, via `resource.getrusage`), `n_points` — alongside the existing
+  `condition_number`.
+- **Hash design**: canonical sorted `repr` → sha256, so identical inputs hash
+  identically (reproducibility) and any change to data / model topology / phase /
+  instrument changes the *corresponding* digest (change detection). Param-graph
+  hash deliberately excludes parameter *values* — it answers "did the model
+  structure change", not "did the fit move".
+- **Cost note**: building a manifest each `refine` calls `git rev-parse`
+  (subprocess) and reads `pixi.lock`. Fine for the reference oracle; a production
+  engine should cache the env/git lookups across a campaign's many refines.
+- 79 unit tests pass (10 new BLOCKING provenance tests in `test_provenance.py`);
+  ruff + black clean.
