@@ -209,11 +209,21 @@ class ProductionEngine:
 
     name = "production-numpy"
 
-    def __init__(self) -> None:
+    def __init__(self, backend: str = "numpy") -> None:
         from aura.engine.minimize import ProductionMinimizer
         from aura.engine.parametric import ProductionParametric
 
-        self.forward = ProductionForward()
+        if backend == "jax":
+            from aura.engine.forward_jax import JaxForward
+
+            self.forward = JaxForward()
+        elif backend == "numpy":
+            self.forward = ProductionForward()
+        else:
+            raise ValueError(
+                f"Unknown backend {backend!r} (expected 'numpy' or 'jax')."
+            )
+        self.backend = backend
         self.parametric = ProductionParametric()
         self.minimizer = ProductionMinimizer()
 

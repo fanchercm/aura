@@ -323,3 +323,36 @@ so shared coefficients replace one-parameter-per-pattern (Stinton & Evans 2007).
   forcing a brittle refactor + 2× ~15-min runtime.
 - `test_invariants` unaffected (no spec/reference change). 128 tests pass (88 unit
   + 40 production/swap physics) + 33 oracle; ruff + black clean. Phase 5 complete.
+
+### 2026-06-11: Phase 6 — JAX/autodiff backend
+
+`src/aura/engine/forward_jax.py` — `JaxForward`, a differentiable reimplementation
+of the CW forward model whose Jacobian comes from **autodiff** (`jax.jacfwd`),
+not finite differences (JAXFit/JAX-COSMO substrate). `jax>=0.4` optional dep
+(`pip install -e ".[jax]"`); CPU.
+
+- **Design**: reflections (hkl + multiplicity) are pre-enumerated with gemmi at
+  the current cell (a discrete set, fixed under AD's infinitesimal perturbations);
+  everything continuous — d via the reciprocal metric, CW positions, structure
+  factors (IT92 X-ray Gaussians `Σaᵢexp(-bᵢs²)+c`, constant neutron b, coefs from
+  gemmi), full-grid pseudo-Voigt — is JAX, so the model differentiates w.r.t.
+  cell / atom / scale / bkg / fwhm / eta. The param→input gather (`_input_spec`)
+  maps each physics input to a varied x-slot or a constant, including the cubic
+  shim, so `jacfwd` gives `(n_points, n_varied)`.
+- **MUST be 64-bit**: `jax.config.update("jax_enable_x64", True)` on import.
+  float32 would blow the AD-vs-FD and numpy-parity tolerances.
+- **Validated** (`test_jax_backend.py`, 6 tests): **AD Jacobian vs independent FD
+  of the same JAX model agrees to `jacobian_rtol`=1e-4** (actual ~1e-7) on every
+  varied parameter for CW X-ray AND CW neutron, *including `cell.a`* — the
+  GSAS-II metric-tensor failure class differentiates cleanly through the direct
+  G* (no A-tensor layer). JAX vs numpy full-grid forward agree to **1.2e-7**
+  (same physics). `ProductionEngine(backend="jax")` conforms to ForwardModel.
+- **`ProductionEngine(backend="numpy"|"jax")`** switch (default numpy, backward-
+  compatible). `expand`/`refine` unchanged.
+- **Scope**: JAX backend is CW single-phase. TOF/EDD and multi-phase raise
+  `NotImplementedError` (numpy backend covers them). Wiring the *minimizer* to
+  consume AD Jacobians directly (vs the Phase-5 residual-FD) for speed, and
+  extending JAX to TOF/EDD/multi-phase, are incremental follow-ups — the Phase-6
+  deliverable is the differentiable substrate + the AD-vs-FD invariant made real.
+- 46 production+JAX physics tests pass (incl. 6 JAX); `test_invariants` unaffected;
+  ruff + black clean. Phase 6 complete.

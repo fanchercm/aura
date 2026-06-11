@@ -39,6 +39,10 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.5.0",
 ]
+# Optional differentiable backend (autodiff Jacobians). CPU by default.
+jax = [
+    "jax>=0.4.0",
+]
 
 [project.urls]
 Repository = "https://github.com/yourusername/aura"
