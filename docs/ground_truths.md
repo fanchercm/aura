@@ -356,3 +356,41 @@ not finite differences (JAXFit/JAX-COSMO substrate). `jax>=0.4` optional dep
   deliverable is the differentiable substrate + the AD-vs-FD invariant made real.
 - 46 production+JAX physics tests pass (incl. 6 JAX); `test_invariants` unaffected;
   ruff + black clean. Phase 6 complete.
+
+### 2026-06-11: Phase 7 — domain modules (background-first), texture, QPA
+
+`src/aura/domains/` — pluggable physics contributions, configured on the engine,
+reading their refinable coefficients from `state.parameters`.
+
+- **`ChebyshevBackground`** (the priority — background is the dominant parameter-
+  explosion risk, MOD-3): a spec `DomainModule` whose `contribute(state, hist,
+  y_calc)` adds `Σ c_k T_k(t)` (t = x mapped to [-1,1]), reading `hist:<id>:bkg_c{k}`.
+  A handful of coefficients replace a per-channel background. Wired into
+  `ProductionForward(domain_modules=...)` / `ProductionEngine(domain_modules=...)`,
+  applied after the peak sum.
+- **CONCRETE WIN (closes the Phase-4 loop)**: refining real PbSO₄/D1A CW-neutron
+  with a Chebyshev(6) background drops **Rwp 0.52 → 0.39** (GoF 103 → 58) while the
+  lattice stays recovered (6.955/8.470/5.393). Remaining gap is the single-FWHM
+  profile / approximate LP — profile-coefficient refinement is a later improvement.
+- **`MarchDollase`** texture: a **per-reflection** preferred-orientation
+  multiplier `P(α)=(r²cos²α+sin²α/r)^(-3/2)` (α = angle between reflection and PO
+  axis via the reciprocal metric). It is *not* a `DomainModule` — texture is
+  multiplicative per reflection, which the `contribute(y_calc)` interface can't
+  express (the summed pattern has lost per-reflection identity) — so it's a
+  reflection-level correction applied inside the forward loop, gated on
+  `phase:<name>:march.ratio`. **r=1 is the random/texture-free limit (P≡1)**;
+  r<1 enhances along-axis reflections (P=r⁻³) and suppresses perpendicular
+  (P=r^1.5) — the platy-habit convention.
+- **Interface lesson**: the spec `DomainModule.contribute(y_calc)` fits *additive*
+  contributions (background, diffuse) but not *per-reflection multiplicative* ones
+  (texture, extinction). Aura uses two hooks: additive `DomainModule`s and a
+  reflection-level `texture` correction.
+- **QPA closure** (`aura/quantify.py`): `phase_weight_fractions(phases, scales)` =
+  `s·ZMV` normalized; closure (Σ=1, positive) holds for any positive ZMV (the
+  GSAS-II non-closure bug guard). ZMV uses a cell-volume × asymmetric-unit-mass
+  proxy (exact site multiplicities deferred; they don't affect closure).
+- **Deferred**: full spherical-harmonic ODF texture and anisotropic-microstrain
+  tensor broadening (March-Dollase + the single FWHM cover the demonstrators).
+  Background/texture in the JAX backend (numpy-only for now).
+- 44 production+domain tests pass (10 new in `test_domains.py`); `test_invariants`
+  unaffected; ruff + black clean. Phase 7 complete.

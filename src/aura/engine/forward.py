@@ -68,6 +68,13 @@ class ProductionForward:
     name = "production-numpy"
     peak_window = 12.0  # half-width of the evaluation window, in FWHM units
 
+    def __init__(self, domain_modules=(), texture=None) -> None:
+        # domain_modules: additive DomainModules (e.g. background), applied to the
+        # full pattern via contribute(). texture: an optional per-reflection
+        # preferred-orientation correction (MarchDollase) applied in the loop.
+        self.domain_modules = tuple(domain_modules)
+        self.texture = texture
+
     # ---- parameter resolution -----------------------------------------------
     @staticmethod
     def _pmap(state: RefinementState) -> dict[str, float]:
@@ -137,6 +144,14 @@ class ProductionForward:
         for phase in state.phases:
             eff = self._effective_phase(phase, pmap)
             pscale = pmap.get(f"phase_scale:{phase.name}:{hid}", 1.0)
+            texture = (
+                self.texture
+                if (self.texture and self.texture.phase_name == phase.name)
+                else None
+            )
+            march_ratio = (
+                pmap.get(f"phase:{phase.name}:march.ratio", 1.0) if texture else 1.0
+            )
             refl = _cached_reflections(eff, round(d_min, 4), round(d_max, 4))
             for r in refl:
                 try:
@@ -148,8 +163,13 @@ class ProductionForward:
                     continue
                 fsq = scattering.f_squared(r.hkl, r.d, eff, histogram.data_type)
                 amp = scale * pscale * r.multiplicity * fsq * lp
+                if texture is not None:
+                    amp *= texture.factor(r.hkl, eff.cell, march_ratio)
                 if amp != 0.0:
                     _add_peak(y, x, pos, fwhm, eta, amp, self.peak_window)
+
+        for module in self.domain_modules:
+            y = module.contribute(state, histogram, y)
         return y
 
     # ---- ForwardModel.jacobian (central finite difference) ------------------
@@ -209,16 +229,22 @@ class ProductionEngine:
 
     name = "production-numpy"
 
-    def __init__(self, backend: str = "numpy") -> None:
+    def __init__(self, backend: str = "numpy", domain_modules=(), texture=None) -> None:
         from aura.engine.minimize import ProductionMinimizer
         from aura.engine.parametric import ProductionParametric
 
         if backend == "jax":
+            if domain_modules or texture:
+                raise NotImplementedError(
+                    "Domain modules / texture are numpy-backend only for now."
+                )
             from aura.engine.forward_jax import JaxForward
 
             self.forward = JaxForward()
         elif backend == "numpy":
-            self.forward = ProductionForward()
+            self.forward = ProductionForward(
+                domain_modules=domain_modules, texture=texture
+            )
         else:
             raise ValueError(
                 f"Unknown backend {backend!r} (expected 'numpy' or 'jax')."
