@@ -429,3 +429,38 @@ eval (PERF-4), checkpoint/restart (UX-5), profiling hooks (PERF-6).
   staged/block (fit-by-block) scheduling beyond the per-histogram chunking.
 - 8 scale tests pass; full production suite unaffected; ruff + black clean.
   Phase 8 complete.
+
+### 2026-06-12: Phase 9 — AI triage (propose-only), diagnostics, visualization, CLI
+
+- **`aura.ai.PhaseIdentifier`** (propose-only): ranks candidate phases by a fast,
+  forward-only peak-position match score (predicted strong peaks = mult·|F|²·LP,
+  weighted by the SAME LP as the forward model — without that weighting TOF
+  rankings invert, since the d⁴ Lorentz factor makes large-d/large-TOF peaks the
+  strong ones). Returns `(Phase, confidence∈[0,1])` ranked; **never refines**. A
+  heuristic stand-in for a trained model (CPICANN-style) — the *contract* is the
+  point.
+- **Category H validated** (`tests/ai/test_identify.py`): propose returns only
+  ranked bounded candidates; **candidate round-trips through the engine — the
+  acceptance signal is the engine's Rwp/GoF, never AI confidence**; chemistry
+  filter; ranks the right phase #1 on clean synthetic single-phase data.
+  Hallucination containment (§11.3): negative counts rejected; an unparseable
+  space-group candidate scores 0, not fabricated. Provenance (§11.1): `AIProposal`
+  carries source/model_version/confidence, `human_acceptance=None` (AI never
+  self-accepts). NOTE: on the pressure-shifted multi-phase SNAP data with ambient
+  CIFs the heuristic is unreliable — by design the engine disambiguates, not the AI.
+- **`aura.diagnostics`** (UX-3/UX-4): `summarize`, `classify_parameter`
+  (converged / at_bound / ill_determined / fixed — the "which converged / diverged
+  / not converging" view), `convergence_counts`, `histogram_misfits` (worst-first
+  drill-down), `campaign_summary` (per-state rollup).
+- **`aura.viz`** (matplotlib Agg, headless): `plot_fit` (obs/calc/diff),
+  `plot_parameter_convergence` (relative-σ bars colored by status),
+  `plot_campaign_trajectory` (param ± σ vs driving variable).
+- **`aura.quantify`** carried from Phase 7 (weight fractions).
+- **CLI** (`aura identify`, `aura refine`): wire registry→bridge→engine→
+  diagnostics; `refine` builds a default param set (cubic-aware cell + scale +
+  width + Chebyshev background), prints Rwp/GoF + per-parameter status, optional
+  `--plot`/`--out`. Tested via `CliRunner` on real PbSO₄.
+- **Deferred**: trained ML identifier (the heuristic is the placeholder);
+  interactive PySide6 workbench (Phase 11); plotly dashboards.
+- 108 unit+AI tests pass (diagnostics 7, viz 3, AI 7, CLI 5 + existing); ruff +
+  black clean. Phase 9 complete.
