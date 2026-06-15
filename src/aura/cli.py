@@ -218,5 +218,16 @@ def _seed_rwp(engine, rstate, hist):
     return spec.rwp(hist.y_obs, engine.calculate(rstate, hist), hist.weights)
 
 
+@main.command()
+def gui():
+    """Launch the Aura desktop workbench (requires PySide6)."""
+    from aura.gui import GUINotAvailable, launch
+
+    try:
+        raise SystemExit(launch())
+    except GUINotAvailable as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 if __name__ == "__main__":
     main()

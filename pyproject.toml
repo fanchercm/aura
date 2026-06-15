@@ -30,6 +30,7 @@ dependencies = [
     "tqdm>=4.66.0",
     "pyyaml>=6.0",
     "gemmi>=0.6.0",
+    "h5py>=3.8.0",           # NeXus/HDF5 I/O (Phase 11)
 ]
 
 [project.optional-dependencies]
@@ -43,6 +44,22 @@ dev = [
 jax = [
     "jax>=0.4.0",
 ]
+# Optional desktop workbench (PySide6 ≥ 6.6).
+gui = [
+    "PySide6>=6.6.0",
+]
+# Optional chunked analytics mirror of HDF5 refinement states.
+zarr = [
+    "zarr>=2.16.0",
+]
+# Optional cross-check of azimuthal integration against pyFAI.
+pyFAI = [
+    "pyFAI>=0.21.0",
+]
+# Full install (all optional extras except dev).
+all = [
+    "aura[jax,gui,zarr]",
+]
 
 [project.urls]
 Repository = "https://github.com/yourusername/aura"
@@ -50,6 +67,24 @@ Issues = "https://github.com/yourusername/aura/issues"
 
 [project.scripts]
 aura = "aura.cli:main"
+
+# Entry-point groups that third-party packages use to extend aura.
+# Each group maps a short name to a zero-argument factory returning the
+# protocol implementation.  See aura.plugins for the full SDK documentation.
+[project.entry-points."aura.readers"]
+# (built-in readers register themselves at import; this group is for third-party)
+
+[project.entry-points."aura.exporters"]
+
+[project.entry-points."aura.profile_models"]
+
+[project.entry-points."aura.background_models"]
+
+[project.entry-points."aura.scattering_models"]
+
+[project.entry-points."aura.optimizers"]
+
+[project.entry-points."aura.instrument_kernels"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -78,6 +113,7 @@ markers = [
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
     "physics: marks physics-invariant (oracle) tests",
+    "reference: marks reference cross-validation tests (release gate only)",
 ]
 
 # Coverage configuration
