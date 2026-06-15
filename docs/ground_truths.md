@@ -500,3 +500,58 @@ slices, SCI-1/3). No real 2D/sfact data ships, so it is validated synthetically.
 - 14 new tests (imaging 8, sfact 6); 114 unit+imaging pass; ruff + black clean.
   Phase 10 complete — **all 11 importer/data domains live**; only Phase 11
   (facility runway) remains.
+
+### 2026-06-15: Phase 11 — Facility runway
+
+**NeXus/HDF5 I/O** (`src/aura/io/nexus.py`, 19 tests):
+- `save/load_refinement_state` round-trips all `RefinementState` fields via h5py.
+  Phases (cell + atoms), histograms (x/y_obs/weights + instrument attrs), parameters
+  (name/kind/value/vary/bounds/sigma), constraints, and provenance all survive.
+- Every abscissa dataset carries a `units` attr: CW/neutron → `"deg"`, TOF → `"us"`,
+  EDD → `"keV"`. y_obs labeled `"counts"`. Bad units raise `ValueError` at load.
+- `save/load_measurement_state` handles DiffractionSlice arrays + scalar metadata.
+- Parametric-model callables dropped on save with `UserWarning` (same policy as checkpoint).
+- h5py added to required dependencies in `pyproject.toml`.
+- `AURA_FORMAT_VERSION = "1.0"` written as root attr; version-mismatch warns.
+- HDF5 layout: `/entry/histograms/<id>/{x,y_obs,weights,driving/…}`, `/phases/<name>/cell/`,
+  `/parameters/{names,kinds,values,vary,lower,upper,sigma}`.
+
+**Plugin SDK** (`src/aura/plugins/__init__.py`, 19 tests):
+- `AURA_SDK_VERSION = "1.0"` with `assert_compatible()` semver major-version gate.
+- `register(group, ext)` + `extensions(group)` for 7 named groups:
+  `aura.{readers,exporters,profile_models,background_models,scattering_models,
+  optimizers,instrument_kernels}`.
+- `load_plugins(group=None)` discovers entry-point factories; readers are also
+  registered into `io.registry` for content-sniff dispatch.
+- Six `@runtime_checkable` Protocols: `Exporter`, `ProfileModel`, `BackgroundModel`,
+  `ScatteringModel`, `InstrumentKernel` (+ `Reader` already in `io.registry`).
+- `pyproject.toml` declares all seven entry-point groups as official extension points.
+
+**PySide6 GUI workbench** (`src/aura/gui/`, 5 tests):
+- Import-safe: `aura.gui` imports cleanly without PySide6; `launch()` raises
+  `GUINotAvailable(ImportError)` with clear install instructions when PySide6 absent.
+- `PYSIDE6_AVAILABLE: bool` introspection flag.
+- Three-panel layout (PySide6): `CampaignView` (stimulus trajectory tree),
+  `PatternView` (matplotlib canvas, obs/calc/diff), `ProvenancePanel` (key/value table).
+- `AuraWorkbench` main window; `aura gui` CLI command added.
+- gui/zarr/pyFAI optional extras added to `pyproject.toml`; `aura[all]` meta-extra.
+
+**Reference cross-validation** (`tests/reference/`, 9 tests; `pytest.mark.reference`):
+- PbSO₄ D1A neutron round-robin (CPD Madsen & Hill 1994): loads PBSO4.CWN, refines
+  from perturbed CIF cell, asserts: Rwp improves, cell is physical, each axis within
+  0.5% of CIF reference (a=6.9549, b=8.4723, c=5.3973 Å; Pbnm setting).
+- GoF gate [0.5, 200] — prototype lacks anisotropic ADPs/absorption/extinction so
+  GoF~60 is expected (GSAS-II gets ~1.2 with full model). Cell recovery passes.
+- `tests/reference/golden/` scaffold with capture procedure for GSAS-II golden-file
+  comparison (`|Δ| < 3√(σ_a²+σ_g²)` at release tags).
+- `reference` marker added to `pyproject.toml`; marked release-gate (not per-PR).
+
+**Governance** (`docs/governance.md`):
+- RFC lifecycle: triggers (Protocol/API-breaking changes, scientific defaults,
+  HDF5 format version bumps), 14-day comment period, TSC approval.
+- TSC structure (5 seats: synchrotron, neutron TOF, texture/stress, software, at-large).
+- Extension stability policy: semver on `AURA_SDK_VERSION`, 2-minor deprecation period.
+- Benchmark history + golden-file release gate documented.
+
+**Phase 11 complete — all 12 phases done (0–11). 149 unit tests pass; ruff + black clean.**
+Committed `39b645d` and pushed to `fanchercm/aura:agentic_dev`.
