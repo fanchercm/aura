@@ -71,5 +71,7 @@ def d_range_for_histogram(hist: Histogram, pad: float = 0.0) -> tuple[float, flo
     if not math.isfinite(d_max):
         # Low-angle edge → enormous d; cap so enumeration stays bounded.
         d_max = d_min * 50.0
-    span = d_max - d_min
-    return max(d_min - pad * span, 1e-3), d_max + pad * span
+    # Pad each bound relative to itself, not to the (possibly huge) span: a
+    # near-beam-center bin makes d_max enormous, and a span-relative pad would
+    # push d_min to its floor and explode reflection enumeration (n_max ∝ 1/d_min).
+    return max(d_min * (1.0 - pad), 1e-3), d_max * (1.0 + pad)

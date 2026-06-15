@@ -464,3 +464,39 @@ eval (PERF-4), checkpoint/restart (UX-5), profiling hooks (PERF-6).
   interactive PySide6 workbench (Phase 11); plotly dashboards.
 - 108 unit+AI tests pass (diagnostics 7, viz 3, AI 7, CLI 5 + existing); ruff +
   black clean. Phase 9 complete.
+
+### 2026-06-15: Phase 10 — images, 2D integration, single-crystal ingest
+
+Completes GSAS-II importer parity and builds the **partially-integrated data
+pipeline** that is the project's scientific motivation (2D image → N angular 1D
+slices, SCI-1/3). No real 2D/sfact data ships, so it is validated synthetically.
+
+- **`aura.io.image.DetectorGeometry`** — flat-detector PONI geometry (distance,
+  PONI, pixel sizes, wavelength, shape); native per-pixel 2θ/azimuth/d arrays;
+  `pixel_to_angles`/`angles_to_pixel` round-trip exactly; JSON save/load.
+- **Image readers** (`domain="image"`): `NpyImageReader` (native) +
+  `FabioImageReader` (TIFF/CBF/EDF/GE/Mar via **fabio**, which is installed).
+- **`aura.integrate`**: `integrate_full` (degrade-to-1D, SCI-4) and
+  `integrate_sectors(image, geom, n_sectors)` → a `MeasurementState` of N
+  directionally-resolved 1D slices. Bin values are **summed** intensity, so the
+  sectors partition the pixels and **recombine exactly into the full pattern**
+  (the SCI-4 consistency test). Synthetic Debye-ring image → integrate → peaks at
+  the analytic ring 2θ; → refine recovers the injected NaBr cell to <5e-3 Å.
+- **Single-crystal** (`domain="sfact"`): `ShelxHklReader` (HKLF4, stops at the
+  `0 0 0` terminator) + `CifReflnReader` (gemmi `_refln` loop) → validated
+  `StructureFactors` table. Represent+validate only (powder-profile engine does
+  not refine single-crystal). Domain separation means the same `.cif` serves the
+  `phase` and `sfact` domains without conflict.
+- **Bug fixed (hardens all phases)**: `positions.d_range_for_histogram` padded
+  `d_min` by `pad·span`; an image-integrated pattern includes a near-beam-center
+  bin (2θ≈0) → d_max≈480 Å → span huge → d_min floored to 1e-3 → reflection
+  enumeration tried an 11903³ meshgrid (12 TiB). Now each bound is padded
+  **relative to itself** (`d_min·(1-pad)`, `d_max·(1+pad)`); production-forward/
+  refine/domains tests still pass.
+- pyFAI is NOT installed → the optional pyFAI cross-check is omitted; native
+  integration is validated against analytic ring positions + exact sector
+  recombination instead (rigorous without it). fabio added (available); pyFAI
+  remains an optional cross-check for later.
+- 14 new tests (imaging 8, sfact 6); 114 unit+imaging pass; ruff + black clean.
+  Phase 10 complete — **all 11 importer/data domains live**; only Phase 11
+  (facility runway) remains.

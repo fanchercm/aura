@@ -17,9 +17,11 @@ Importing this package registers the built-in readers.
 from __future__ import annotations
 
 # Importing the reader subpackages triggers their self-registration.
+from aura.io import image as _image  # noqa: F401
 from aura.io import instrument as _instrument  # noqa: F401
 from aura.io import phase as _phase  # noqa: F401
 from aura.io import powder as _powder  # noqa: F401
+from aura.io import sfact as _sfact  # noqa: F401
 from aura.io.registry import (
     Reader,
     ReaderRegistry,
